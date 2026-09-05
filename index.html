@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CineMime — Movie Charades</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#000000;
+    --card:#1C1C1E;
+    --card-elevated:#2C2C2E;
+    --border: rgba(255,255,255,0.09);
+    --text:#FFFFFF;
+    --text-secondary: rgba(235,235,245,0.6);
+    --text-tertiary: rgba(235,235,245,0.3);
+    --blue:#0A84FF;
+    --green:#30D158;
+    --red:#FF453A;
+    --orange:#FF9F0A;
+    --teal:#64D2FF;
+    --pink:#FF375F;
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-pill: 999px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: radial-gradient(circle at 50% -10%, rgba(10,132,255,0.10), transparent 55%), var(--bg);
+    color: var(--text);
+    font-family:'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+  }
+  .app{
+    width:100%;
+    max-width:460px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    padding: 24px 18px 34px;
+  }
+  h1,h2,h3{ margin:0; font-weight:800; letter-spacing:-0.01em; }
+  .brand{ display:flex; align-items:center; gap:10px; margin-bottom: 22px; }
+  .reel{ width:30px;height:30px;flex-shrink:0; }
+  .brand h1{ font-size: 1.35rem; color:var(--text); }
+  .screen{ display:none; flex:1; flex-direction:column; }
+  .screen.active{ display:flex; animation: rise 0.3s cubic-bezier(.25,.8,.25,1); }
+  @keyframes rise{ from{ opacity:0; transform: translateY(8px);} to{ opacity:1; transform:translateY(0);} }
+
+  /* ---------- Modern simple cards ---------- */
+  .panel{
+    background: var(--card);
+    border-radius: var(--radius-lg);
+    padding: 20px 18px 22px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .panel h2{ font-size:1rem; color:var(--text); margin-bottom:12px; font-weight:700; }
+  .panel p.hint{ font-size:0.83rem; color:var(--text-secondary); margin:-6px 0 12px; line-height:1.5; font-weight:500; }
+
+  .team-row{ display:flex; gap:8px; margin-bottom:10px; }
+  .team-row input{ flex:1; }
+  input[type=text], input[type=number]{
+    background: var(--card-elevated);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    font-size: 0.95rem;
+    font-family:'Plus Jakarta Sans', sans-serif;
+    font-weight:600;
+    width:100%;
+  }
+  input:focus{ outline:2px solid var(--blue); outline-offset:1px; }
+  .icon-btn{
+    background: var(--card-elevated);
+    border: 1px solid var(--border);
+    color: var(--red);
+    border-radius: var(--radius-md);
+    width: 44px;
+    flex-shrink:0;
+    font-size: 1.1rem;
+    cursor:pointer;
+  }
+  .add-team{
+    background: none;
+    border: 1.5px dashed rgba(10,132,255,0.5);
+    color: var(--blue);
+    border-radius: var(--radius-md);
+    padding: 11px;
+    width:100%;
+    font-family:'Plus Jakarta Sans'; font-weight:700; font-size:0.88rem;
+    cursor:pointer;
+    margin-top:2px;
+  }
+
+  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    padding: 10px 15px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border);
+    background: var(--card-elevated);
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+    font-weight:700;
+    cursor:pointer;
+    user-select:none;
+    display:flex; align-items:center; gap:7px;
+    transition: transform 0.12s ease;
+  }
+  .chip:active{ transform: scale(0.96); }
+  .chip .dot{ width:8px;height:8px;border-radius:50%; }
+  .chip.selected{ background: var(--chip-color, var(--blue)); border-color: transparent; color: #fff; }
+  .chip.selected .dot{ background:#fff !important; }
+
+  .seg-row{
+    display:flex; gap:2px; background: var(--card-elevated);
+    border: 1px solid var(--border); border-radius: var(--radius-pill);
+    padding: 3px;
+  }
+  .seg-btn{
+    flex:1; text-align:center; padding: 9px 6px; border-radius: var(--radius-pill);
+    font-size:0.82rem; font-weight:700; color: var(--text-secondary); cursor:pointer;
+    user-select:none; transition: background 0.15s ease, color 0.15s ease;
+  }
+  .seg-btn.selected{ background: var(--blue); color: #fff; }
+
+  .field-row{ display:flex; gap:12px; }
+  .field{ flex:1; }
+  .field label{ display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:6px; font-weight:600; }
+
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; padding: 11px 2px; }
+  .toggle-row .label{ font-size:0.9rem; font-weight:700; }
+  .toggle-row .sub{ font-size:0.76rem; color:var(--text-secondary); margin-top:2px; font-weight:500; }
+  .switch{
+    width:46px; height:28px; border-radius:100px;
+    background: rgba(120,120,128,0.32);
+    position:relative; cursor:pointer; flex-shrink:0;
+    transition: background 0.2s;
+  }
+  .switch.on{ background: var(--green); }
+  .switch::after{
+    content:''; position:absolute; top:2px; left:2px;
+    width:24px; height:24px; border-radius:50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    transition: transform 0.2s;
+  }
+  .switch.on::after{ transform: translateX(18px); }
+
+  .primary-btn{
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-pill);
+    padding: 16px;
+    font-family:'Plus Jakarta Sans', sans-serif;
+    font-size: 1rem;
+    font-weight:800;
+    cursor:pointer;
+    width:100%;
+    transition: opacity 0.12s ease;
+  }
+  .primary-btn:active{ opacity: 0.65; }
+  .primary-btn:disabled{ opacity:0.35; cursor:not-allowed; }
+  .error-text{ color: var(--red); font-size:0.82rem; margin: -8px 0 12px; min-height: 1em; font-weight:600; }
+
+  /* ---------- Setup wizard ---------- */
+  .progress-track{
+    height:4px; background: var(--card-elevated); border-radius: var(--radius-pill);
+    overflow:hidden; margin-bottom:8px;
+  }
+  .progress-fill{
+    height:100%; background: var(--blue); border-radius: var(--radius-pill);
+    transition: width 0.3s cubic-bezier(.25,.8,.25,1);
+  }
+  .step-label{ font-size:0.8rem; color:var(--text-secondary); font-weight:700; margin-bottom:18px; }
+  .wizard-step{ display:none; flex-direction:column; }
+  .wizard-step.active{ display:flex; }
+  .wizard-step.anim-fwd{ animation: slideInRight 0.3s cubic-bezier(.25,.8,.25,1); }
+  .wizard-step.anim-back{ animation: slideInLeft 0.3s cubic-bezier(.25,.8,.25,1); }
+  @keyframes slideInRight{ from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
+  @keyframes slideInLeft{ from{opacity:0; transform:translateX(-20px);} to{opacity:1; transform:translateX(0);} }
+  .wizard-nav{ display:flex; gap:10px; margin-top:6px; }
+  .wizard-nav .ghost-btn{ width:auto; flex:0 0 auto; padding: 16px 20px; margin-top:0; }
+  .wizard-nav .primary-btn{ flex:1; }
+
+  /* ---------- Game screen ---------- */
+  .turn-banner{ text-align:center; margin-bottom: 16px; }
+  .turn-banner .who{ font-size:0.82rem; color:var(--text-secondary); font-weight:600; }
+  .turn-banner h2{ font-size:1.5rem; color:var(--text); margin-top:3px; }
+
+  .stage{
+    background: var(--card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 30px 22px 26px;
+    display:flex; flex-direction:column; align-items:center;
+    gap: 18px;
+    position:relative;
+    overflow:hidden;
+    min-height: 300px;
+    justify-content:center;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .ring-wrap{ position:relative; width:126px; height:126px; }
+  .ring-wrap svg{ transform: rotate(-90deg); }
+  .ring-bg{ fill:none; stroke: rgba(255,255,255,0.1); stroke-width:8; }
+  .ring-fg{ fill:none; stroke: var(--blue); stroke-width:8; stroke-linecap:round; transition: stroke-dashoffset 1s linear, stroke 0.3s; }
+  .ring-time{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:2.1rem; font-weight:800; color:var(--text);
+  }
+
+  .movie-card{ text-align:center; z-index:1; padding: 0 6px; }
+  .lang-tag{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size: 0.76rem; color: var(--text-secondary); font-weight:700;
+    margin-bottom: 10px;
+  }
+  .lang-tag .dot{ width:7px;height:7px;border-radius:50%; }
+  .movie-title{ font-size: 1.75rem; font-weight:800; color: var(--text); line-height:1.25; word-break: break-word; }
+  .movie-title.scrambled{ letter-spacing: 2px; color: var(--teal); }
+
+  .hidden-overlay{ z-index:2; text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px; }
+  .hidden-overlay p{ color:var(--text-secondary); font-size:0.9rem; max-width:230px; line-height:1.55; margin:0; font-weight:500; }
+
+  .action-row{ display:flex; gap:10px; margin-top: 16px; }
+  .skip-btn{
+    flex:1; background: rgba(255,69,58,0.15); color: var(--red);
+    border: none; border-radius: var(--radius-pill);
+    padding: 16px; font-weight:800; font-size:0.95rem; cursor:pointer;
+    transition: opacity 0.12s ease;
+  }
+  .skip-btn:active{ opacity:0.6; }
+  .correct-btn{
+    flex:2; background: var(--green);
+    color: #06110D; border:none; border-radius: var(--radius-pill);
+    padding: 16px; font-weight:800; font-size:1rem; cursor:pointer;
+    transition: opacity 0.12s ease;
+  }
+  .correct-btn:active{ opacity:0.7; }
+
+  .score-strip{
+    margin-top: 20px; display:flex; flex-wrap:wrap; gap: 8px 18px;
+    justify-content:center; font-size:0.86rem; color: var(--text-secondary); font-weight:600;
+  }
+  .score-strip .entry{ display:flex; align-items:center; gap:6px; }
+  .score-strip .entry.current{ color: var(--text); }
+  .score-strip .entry .pip{ width:6px;height:6px;border-radius:50%; background: var(--blue); opacity:0; }
+  .score-strip .entry.current .pip{ opacity:1; }
+  .score-strip .num{ font-weight:800; color: var(--text); }
+
+  .turn-end{ text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; z-index:2; }
+  .turn-end .big{ font-size: 2.6rem; font-weight:800; color: var(--text); }
+
+  /* ---------- Winner screen ---------- */
+  .winner-wrap{ flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; gap: 8px; }
+  .winner-wrap .eyebrow{ color: var(--text-secondary); font-size:0.9rem; font-weight:600; }
+  .winner-wrap h2{ font-size: 2.1rem; margin: 4px 0 20px; color: var(--green); }
+  .final-scores{ width:100%; margin-bottom: 26px; }
+  .final-row{
+    display:flex; justify-content:space-between; align-items:center; padding: 13px 6px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.98rem; font-weight:700;
+  }
+  .final-row:first-child .name::before{ content:'🏆 '; }
+  .final-row .score{ font-weight:800; color: var(--text); }
+  .ghost-btn{
+    background:none; border: none; color: var(--blue);
+    border-radius: var(--radius-pill); padding: 14px; font-size:0.95rem; font-weight:700; width:100%; margin-top:10px; cursor:pointer;
+    transition: opacity 0.12s ease;
+  }
+  .ghost-btn:active{ opacity:0.6; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="brand">
+    <svg class="reel" viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="20" stroke="#0A84FF" stroke-width="3"/>
+      <circle cx="24" cy="12" r="4.2" fill="#0A84FF"/>
+      <circle cx="34.4" cy="19.3" r="4.2" fill="#0A84FF"/>
+      <circle cx="30.6" cy="31.4" r="4.2" fill="#0A84FF"/>
+      <circle cx="17.4" cy="31.4" r="4.2" fill="#0A84FF"/>
+      <circle cx="13.6" cy="19.3" r="4.2" fill="#0A84FF"/>
+    </svg>
+    <h1>CineMime</h1>
+  </div>
+
+  <!-- SETUP SCREEN (STEP WIZARD) -->
+  <div class="screen active" id="setup-screen">
+
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="step-label" id="step-label">Step 1 of 4 — Teams</div>
+
+    <div class="wizard-step active" data-step="1">
+      <div class="panel">
+        <h2>Teams</h2>
+        <p class="hint">Two or more teams take turns. One player acts, their team shouts guesses.</p>
+        <div id="team-rows"></div>
+        <button class="add-team" id="add-team-btn">+ Add another team</button>
+      </div>
+    </div>
+
+    <div class="wizard-step" data-step="2">
+      <div class="panel">
+        <h2>Languages in the deck</h2>
+        <p class="hint">Pick which industries to pull movie titles from.</p>
+        <div class="chip-row" id="lang-chips"></div>
+      </div>
+    </div>
+
+    <div class="wizard-step" data-step="3">
+      <div class="panel">
+        <h2>Difficulty</h2>
+        <p class="hint">Easy titles are short and literal. Hard titles are longer, less mainstream, and genuinely tricky to act out.</p>
+        <div class="seg-row" id="difficulty-seg"></div>
+      </div>
+    </div>
+
+    <div class="wizard-step" data-step="4">
+      <div class="panel">
+        <h2>Match settings</h2>
+        <div class="field-row">
+          <div class="field">
+            <label>Seconds per turn</label>
+            <input type="number" id="time-limit" value="45" min="15" max="180" step="5">
+          </div>
+          <div class="field">
+            <label>Points to win</label>
+            <input type="number" id="target-score" value="15" min="3" max="99" step="1">
+          </div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="label">Lose a point on skip</div>
+            <div class="sub">Skipping a tough title costs the team a point</div>
+          </div>
+          <div class="switch" id="skip-penalty-toggle"></div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="label">Scrambled-letters mode</div>
+            <div class="sub">Actor sees the title with letters shuffled — extra challenge reading it fast</div>
+          </div>
+          <div class="switch" id="scramble-toggle"></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="error-text" id="setup-error"></p>
+    <div class="wizard-nav">
+      <button class="ghost-btn" id="back-btn" style="display:none;">Back</button>
+      <button class="primary-btn" id="next-btn">Next</button>
+    </div>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div class="screen" id="game-screen">
+    <div class="turn-banner">
+      <div class="who">Up now</div>
+      <h2 id="current-team-name">—</h2>
+    </div>
+
+    <div class="stage" id="stage">
+
+      <div class="hidden-overlay" id="pre-reveal">
+        <p>Hand the phone to this team's actor. Nobody else should look at the screen.</p>
+        <button class="primary-btn" id="reveal-btn" style="width:auto; padding:14px 30px;">Reveal &amp; start timer</button>
+      </div>
+
+      <div id="active-turn" style="display:none; flex-direction:column; align-items:center; gap:18px; z-index:1;">
+        <div class="ring-wrap">
+          <svg width="126" height="126">
+            <circle class="ring-bg" cx="63" cy="63" r="52"></circle>
+            <circle class="ring-fg" id="ring-fg" cx="63" cy="63" r="52"></circle>
+          </svg>
+          <div class="ring-time" id="ring-time">45</div>
+        </div>
+        <div class="movie-card">
+          <div class="lang-tag"><span class="dot" id="active-lang-dot"></span><span id="active-lang-label"></span></div>
+          <div class="movie-title" id="movie-title"></div>
+        </div>
+      </div>
+
+      <div class="turn-end" id="turn-end" style="display:none;">
+        <div class="who" id="turn-end-who">Time's up</div>
+        <div class="big" id="turn-end-score">+0</div>
+        <p style="color:var(--text-secondary); font-size:0.92rem; margin:0; font-weight:600;" id="turn-end-movie"></p>
+      </div>
+    </div>
+
+    <div class="action-row" id="action-row" style="display:none;">
+      <button class="skip-btn" id="skip-btn">Skip</button>
+      <button class="correct-btn" id="correct-btn">Got it! ✓</button>
+    </div>
+
+    <button class="primary-btn" id="next-turn-btn" style="display:none; margin-top:16px;">Next team's turn</button>
+
+    <div class="score-strip" id="score-strip"></div>
+  </div>
+
+  <!-- WINNER SCREEN -->
+  <div class="screen" id="winner-screen">
+    <div class="winner-wrap">
+      <div class="eyebrow">Curtain call</div>
+      <h2 id="winner-name">—</h2>
+      <div class="final-scores" id="final-scores"></div>
+      <button class="primary-btn" id="rematch-btn">Rematch — same teams</button>
+      <button class="ghost-btn" id="new-game-btn">New game</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+
+  // ---------- Movie deck ----------
+  const MOVIES = {
+    English: {
+      easy: ["Jaws","Frozen","Speed","Up","Cars","Ghost","Alien","Twister"],
+      medium: ["Finding Nemo","The Lion King","Home Alone","Jurassic Park","The Godfather","Toy Story","Back to the Future","Slumdog Millionaire"],
+      hard: ["Eternal Sunshine of the Spotless Mind","The Curious Case of Benjamin Button","Everything Everywhere All at Once","The Grand Budapest Hotel","Once Upon a Time in Hollywood","No Country for Old Men","The Shape of Water","Birdman"]
+    },
+    Hindi: {
+      easy: ["Sholay","Dangal","PK","Lagaan","Dhoom","Fan","Baazigar","Gadar"],
+      medium: ["3 Idiots","Gully Boy","Andaz Apna Apna","Dilwale Dulhania Le Jayenge","Queen","Barfi","Rang De Basanti","Chak De India"],
+      hard: ["Zindagi Na Milegi Dobara","Kabhi Khushi Kabhie Gham","Jab We Met","Ankhon Dekhi","Tumbbad","Andhadhun","Lage Raho Munna Bhai","Kahaani"]
+    },
+    Tamil: {
+      easy: ["Master","Kaithi","Vikram","Baashha","Theri","Bigil","Petta","Enthiran"],
+      medium: ["Vada Chennai","Kaakha Kaakha","Soorarai Pottru","Super Deluxe","96","Jigarthanda","Pariyerum Perumal","Asuran"],
+      hard: ["Aaranya Kaandam","Iruvar","Kaala","Vikram Vedha","Mandela","Visaranai","Peranbu","8 Thottakkal"]
+    },
+    Malayalam: {
+      easy: ["Lucifer","Charlie","Premam","Drishyam","Pulimurugan","Ustad Hotel","Bangalore Days","Mumbai Police"],
+      medium: ["Kumbalangi Nights","Angamaly Diaries","Maheshinte Prathikaaram","Manichitrathazhu","Thondimuthalum Driksakshiyum","Kammatti Paadam","Sudani from Nigeria","Virus"],
+      hard: ["Android Kunjappan Version 5.25","Ee Ma Yau","Joji","Jallikattu","Anjaam Pathiraa","Nna Thaan Case Kodu","C U Soon","Kala"]
+    }
+  };
+  const LANG_COLORS = { English:"#0A84FF", Hindi:"#FF9F0A", Tamil:"#FF375F", Malayalam:"#64D2FF" };
+  const DIFFICULTIES = [
+    { id:'easy', label:'Easy' },
+    { id:'medium', label:'Medium' },
+    { id:'hard', label:'Hard' },
+    { id:'mixed', label:'Mixed' }
+  ];
+
+  // ---------- State ----------
+  let state = {
+    teams: [],
+    languages: Object.keys(MOVIES),
+    timeLimit: 45,
+    targetScore: 15,
+    skipPenalty: false,
+    scramble: false,
+    deck: [],
+    deckPos: 0,
+    currentTeamIdx: 0,
+    turnScore: 0,
+    timer: null,
+    timeLeft: 45,
+    currentMovie: null
+  };
+
+  // ---------- Setup: team rows ----------
+  const teamRowsEl = document.getElementById('team-rows');
+  function renderTeamRows(){
+    teamRowsEl.innerHTML = '';
+    const names = state.setupTeams || ['Team One','Team Two'];
+    names.forEach((name, i) => {
+      const row = document.createElement('div');
+      row.className = 'team-row';
+      row.innerHTML = `<input type="text" value="${name}" placeholder="Team name" data-idx="${i}">` +
+        (names.length > 2 ? `<button class="icon-btn" data-remove="${i}">✕</button>` : '');
+      teamRowsEl.appendChild(row);
+    });
+    teamRowsEl.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', e => {
+        state.setupTeams[+e.target.dataset.idx] = e.target.value;
+      });
+    });
+    teamRowsEl.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        state.setupTeams.splice(+e.target.dataset.remove, 1);
+        renderTeamRows();
+      });
+    });
+  }
+  state.setupTeams = ['Team One','Team Two'];
+  renderTeamRows();
+
+  document.getElementById('add-team-btn').addEventListener('click', () => {
+    if(state.setupTeams.length >= 8) return;
+    state.setupTeams.push('Team ' + (state.setupTeams.length + 1));
+    renderTeamRows();
+  });
+
+  // ---------- Setup: language chips ----------
+  const langChipsEl = document.getElementById('lang-chips');
+  let selectedLangs = new Set(Object.keys(MOVIES));
+  function renderLangChips(){
+    langChipsEl.innerHTML = '';
+    Object.keys(MOVIES).forEach(lang => {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (selectedLangs.has(lang) ? ' selected' : '');
+      chip.style.setProperty('--chip-color', LANG_COLORS[lang]);
+      chip.innerHTML = `<span class="dot" style="background:${LANG_COLORS[lang]}"></span>${lang}`;
+      chip.addEventListener('click', () => {
+        if(selectedLangs.has(lang)){
+          if(selectedLangs.size > 1) selectedLangs.delete(lang);
+        } else {
+          selectedLangs.add(lang);
+        }
+        renderLangChips();
+      });
+      langChipsEl.appendChild(chip);
+    });
+  }
+  renderLangChips();
+
+  // ---------- Setup: difficulty segmented control ----------
+  const difficultySegEl = document.getElementById('difficulty-seg');
+  let selectedDifficulty = 'mixed';
+  function renderDifficultySeg(){
+    difficultySegEl.innerHTML = '';
+    DIFFICULTIES.forEach(d => {
+      const seg = document.createElement('div');
+      seg.className = 'seg-btn' + (selectedDifficulty === d.id ? ' selected' : '');
+      seg.textContent = d.label;
+      seg.addEventListener('click', () => {
+        selectedDifficulty = d.id;
+        renderDifficultySeg();
+      });
+      difficultySegEl.appendChild(seg);
+    });
+  }
+  renderDifficultySeg();
+
+  function setupToggle(id, key, defaultVal){
+    const el = document.getElementById(id);
+    let val = defaultVal;
+    if(val) el.classList.add('on');
+    el.addEventListener('click', () => {
+      val = !val;
+      el.classList.toggle('on', val);
+      state[key] = val;
+    });
+    state[key] = val;
+  }
+  setupToggle('skip-penalty-toggle', 'skipPenalty', false);
+  setupToggle('scramble-toggle', 'scramble', false);
+
+  function shuffleArray(arr){
+    const a = arr.slice();
+    for(let i = a.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function scrambleTitle(title){
+    return title.split(' ').map(word => {
+      if(word.length <= 3) return word;
+      const letters = word.split('');
+      const shuffled = shuffleArray(letters);
+      if(shuffled.join('') === word && letters.length > 1){
+        [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
+      }
+      return shuffled.join('');
+    }).join(' ');
+  }
+
+  // ---------- Setup wizard navigation ----------
+  const TOTAL_STEPS = 4;
+  const STEP_TITLES = { 1:'Teams', 2:'Languages', 3:'Difficulty', 4:'Match settings' };
+  let currentStep = 1;
+  const errorEl = document.getElementById('setup-error');
+  const backBtn = document.getElementById('back-btn');
+  const nextBtn = document.getElementById('next-btn');
+
+  function validateTeams(){
+    const cleanTeams = state.setupTeams.map(t => t.trim()).filter(Boolean);
+    if(cleanTeams.length < 2) return { ok:false, message:'Add at least two teams to begin.' };
+    if(new Set(cleanTeams).size !== cleanTeams.length) return { ok:false, message:'Give each team a different name.' };
+    return { ok:true, teams: cleanTeams };
+  }
+
+  function showStep(n, direction){
+    document.querySelectorAll('.wizard-step').forEach(s => {
+      s.classList.remove('active','anim-fwd','anim-back');
+    });
+    const target = document.querySelector(`.wizard-step[data-step="${n}"]`);
+    target.classList.add('active');
+    void target.offsetWidth;
+    target.classList.add(direction === 'back' ? 'anim-back' : 'anim-fwd');
+
+    document.getElementById('progress-fill').style.width = (n / TOTAL_STEPS * 100) + '%';
+    document.getElementById('step-label').textContent = `Step ${n} of ${TOTAL_STEPS} — ${STEP_TITLES[n]}`;
+    backBtn.style.display = n > 1 ? 'block' : 'none';
+    nextBtn.textContent = n === TOTAL_STEPS ? 'Start the show' : 'Next';
+    errorEl.textContent = '';
+  }
+
+  backBtn.addEventListener('click', () => {
+    if(currentStep === 1) return;
+    currentStep--;
+    showStep(currentStep, 'back');
+  });
+
+  nextBtn.addEventListener('click', () => {
+    if(currentStep === 1){
+      const v = validateTeams();
+      if(!v.ok){ errorEl.textContent = v.message; return; }
+    }
+    if(currentStep < TOTAL_STEPS){
+      currentStep++;
+      showStep(currentStep, 'fwd');
+      return;
+    }
+    // Final step: start the game
+    const v = validateTeams();
+    if(!v.ok){
+      currentStep = 1;
+      showStep(1, 'back');
+      errorEl.textContent = v.message;
+      return;
+    }
+    state.teams = v.teams.map(name => ({ name, score: 0 }));
+    state.languages = Array.from(selectedLangs);
+    state.difficulty = selectedDifficulty;
+    state.timeLimit = Math.max(15, +document.getElementById('time-limit').value || 45);
+    state.targetScore = Math.max(3, +document.getElementById('target-score').value || 15);
+    state.currentTeamIdx = 0;
+
+    buildDeck();
+    goToScreen('game-screen');
+    startTurnBanner();
+  });
+
+  function buildDeck(){
+    const tiers = state.difficulty === 'mixed' ? ['easy','medium','hard'] : [state.difficulty];
+    let pool = [];
+    state.languages.forEach(lang => {
+      tiers.forEach(tier => {
+        MOVIES[lang][tier].forEach(title => pool.push({ title, lang, difficulty: tier }));
+      });
+    });
+    state.deck = shuffleArray(pool);
+    state.deckPos = 0;
+  }
+
+  function nextMovie(){
+    if(state.deckPos >= state.deck.length){
+      let reshuffled = shuffleArray(state.deck);
+      const lastShown = state.deck[state.deck.length - 1];
+      if(reshuffled.length > 1 && reshuffled[0].title === lastShown.title){
+        [reshuffled[0], reshuffled[1]] = [reshuffled[1], reshuffled[0]];
+      }
+      state.deck = reshuffled;
+      state.deckPos = 0;
+    }
+    const movie = state.deck[state.deckPos];
+    state.deckPos++;
+    return movie;
+  }
+
+  // ---------- Screen switching ----------
+  function goToScreen(id){
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  // ---------- Game screen ----------
+  function startTurnBanner(){
+    const team = state.teams[state.currentTeamIdx];
+    document.getElementById('current-team-name').textContent = team.name;
+    document.getElementById('pre-reveal').style.display = 'flex';
+    document.getElementById('active-turn').style.display = 'none';
+    document.getElementById('turn-end').style.display = 'none';
+    document.getElementById('action-row').style.display = 'none';
+    document.getElementById('next-turn-btn').style.display = 'none';
+    state.turnScore = 0;
+    renderScoreStrip();
+  }
+
+  document.getElementById('reveal-btn').addEventListener('click', () => {
+    document.getElementById('pre-reveal').style.display = 'none';
+    document.getElementById('active-turn').style.display = 'flex';
+    document.getElementById('action-row').style.display = 'flex';
+    state.timeLeft = state.timeLimit;
+    state.currentMovie = nextMovie();
+    renderMovie();
+    startTimer();
+  });
+
+  function renderMovie(){
+    const m = state.currentMovie;
+    document.getElementById('active-lang-dot').style.background = LANG_COLORS[m.lang];
+    const tierLabel = m.difficulty.charAt(0).toUpperCase() + m.difficulty.slice(1);
+    document.getElementById('active-lang-label').textContent = m.lang + ' · ' + tierLabel;
+    const titleEl = document.getElementById('movie-title');
+    titleEl.textContent = state.scramble ? scrambleTitle(m.title) : m.title;
+    titleEl.classList.toggle('scrambled', state.scramble);
+  }
+
+  const RING_R = 52;
+  const RING_CIRC = 2 * Math.PI * RING_R;
+  const ringFg = document.getElementById('ring-fg');
+  ringFg.style.strokeDasharray = RING_CIRC;
+
+  function startTimer(){
+    updateRing();
+    document.getElementById('ring-time').textContent = state.timeLeft;
+    clearInterval(state.timer);
+    state.timer = setInterval(() => {
+      state.timeLeft--;
+      document.getElementById('ring-time').textContent = Math.max(state.timeLeft, 0);
+      updateRing();
+      if(state.timeLeft <= 0){
+        clearInterval(state.timer);
+        endTurn('timeout');
+      }
+    }, 1000);
+  }
+
+  function updateRing(){
+    const frac = Math.max(state.timeLeft, 0) / state.timeLimit;
+    ringFg.style.strokeDashoffset = RING_CIRC * (1 - frac);
+    ringFg.style.stroke = frac < 0.2 ? '#FF453A' : '#0A84FF';
+  }
+
+  document.getElementById('correct-btn').addEventListener('click', () => {
+    if(state.timeLeft <= 0) return;
+    state.teams[state.currentTeamIdx].score += 1;
+    endTurn('correct');
+  });
+
+  document.getElementById('skip-btn').addEventListener('click', () => {
+    if(state.timeLeft <= 0) return;
+    let penalty = false;
+    if(state.skipPenalty){
+      state.teams[state.currentTeamIdx].score = Math.max(0, state.teams[state.currentTeamIdx].score - 1);
+      penalty = true;
+    }
+    endTurn('skipped', penalty);
+  });
+
+  function checkWin(){
+    const winner = state.teams.find(t => t.score >= state.targetScore);
+    if(winner){
+      clearInterval(state.timer);
+      showWinner();
+      return true;
+    }
+    return false;
+  }
+
+  function endTurn(result, penalty){
+    clearInterval(state.timer);
+    document.getElementById('active-turn').style.display = 'none';
+    document.getElementById('action-row').style.display = 'none';
+    document.getElementById('turn-end').style.display = 'flex';
+
+    const whoEl = document.getElementById('turn-end-who');
+    const scoreEl = document.getElementById('turn-end-score');
+    const movieEl = document.getElementById('turn-end-movie');
+    movieEl.textContent = 'It was: ' + state.currentMovie.title;
+
+    if(result === 'correct'){
+      whoEl.textContent = 'Correct!';
+      scoreEl.textContent = '+1';
+    } else if(result === 'skipped'){
+      whoEl.textContent = 'Skipped';
+      scoreEl.textContent = penalty ? '-1' : '+0';
+    } else {
+      whoEl.textContent = "Time's up";
+      scoreEl.textContent = '+0';
+    }
+
+    renderScoreStrip();
+    if(result === 'correct' && checkWin()) return;
+    document.getElementById('next-turn-btn').style.display = 'block';
+  }
+
+  document.getElementById('next-turn-btn').addEventListener('click', () => {
+    state.currentTeamIdx = (state.currentTeamIdx + 1) % state.teams.length;
+    startTurnBanner();
+  });
+
+  function renderScoreStrip(){
+    const strip = document.getElementById('score-strip');
+    strip.innerHTML = '';
+    state.teams.forEach((t, i) => {
+      const entry = document.createElement('div');
+      entry.className = 'entry' + (i === state.currentTeamIdx ? ' current' : '');
+      entry.innerHTML = `<span class="pip"></span>${t.name} <span class="num">${t.score}</span>`;
+      strip.appendChild(entry);
+    });
+  }
+
+  // ---------- Winner screen ----------
+  function showWinner(){
+    goToScreen('winner-screen');
+    const sorted = state.teams.slice().sort((a,b) => b.score - a.score);
+    document.getElementById('winner-name').textContent = sorted[0].name + ' wins';
+    const finalEl = document.getElementById('final-scores');
+    finalEl.innerHTML = '';
+    sorted.forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'final-row';
+      row.innerHTML = `<span class="name">${t.name}</span><span class="score">${t.score}</span>`;
+      finalEl.appendChild(row);
+    });
+  }
+
+  document.getElementById('rematch-btn').addEventListener('click', () => {
+    state.teams.forEach(t => t.score = 0);
+    state.currentTeamIdx = 0;
+    buildDeck();
+    goToScreen('game-screen');
+    startTurnBanner();
+  });
+
+  document.getElementById('new-game-btn').addEventListener('click', () => {
+    currentStep = 1;
+    showStep(1, 'back');
+    goToScreen('setup-screen');
+  });
+
+})();
+</script>
+</body>
+</html>
