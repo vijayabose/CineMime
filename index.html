@@ -578,8 +578,8 @@
   function difficultyForTitle(title){
     const words = title.split(/\s+/).length;
     if(words <= 2 && title.length <= 22) return 'easy';
-    if(words <= 5 && title.length <= 40) return 'medium';
-    return 'hard';
+    if(words >= 4 || title.length >= 30) return 'hard';
+    return 'medium';
   }
 
   function wikipediaCategoryCandidates(lang){
