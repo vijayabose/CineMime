@@ -583,51 +583,34 @@
   }
 
   function wikipediaCategoryCandidates(lang){
-    const base = LANG_CATEGORY[lang].replace(/^Category:/, '');
-    if(lang === 'English') return [base];
-
-    // Wikipedia organizes Hindi, Tamil, and Malayalam films primarily into
-    // year-specific categories; their broad parent categories contain almost
-    // no individual movies. Shuffle recent years to keep each game fresh.
+    // Individual films are organized into year-specific categories for all
+    // four industries. Randomizing the year order keeps each game fresh.
     const latestCompleteYear = new Date().getUTCFullYear() - 1;
     const years = [];
     for(let year = latestCompleteYear; year >= 1990; year--) years.push(year);
     return shuffleArray(years).map(year => `${year} ${lang}-language films`);
   }
 
-  async function fetchLanguageMovies(lang){
+  async function fetchLanguageMovies(lang, requiredDifficulty){
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
     const candidates = wikipediaCategoryCandidates(lang);
+    const tiers = { easy: [], medium: [], hard: [] };
+    const seen = new Set();
     let lastReason = 'no films found';
 
     try{
-      // Try several randomly ordered year categories. This also handles the
-      // occasional year whose Wikipedia category is missing or too small.
+      // Accumulate random years until the chosen difficulty has a real deck.
+      // This prevents Hard mode from silently falling back to easy titles.
       for(const category of candidates.slice(0, 8)){
         try{
           const search = `incategory:"${category}"`;
-          const info = await fetchWikipediaJson({
-            list: 'search',
-            srsearch: search,
-            srnamespace: '0',
-            srlimit: '1'
-          }, controller);
-          const totalHits = Number(info.query && info.query.searchinfo && info.query.searchinfo.totalhits) || 0;
-          if(totalHits < 5){
-            lastReason = category + ' has too few films';
-            continue;
-          }
-
-          const batchSize = Math.min(200, totalHits);
-          const maxOffset = Math.max(0, Math.min(totalHits - batchSize, 9800));
-          const offset = Math.floor(Math.random() * (maxOffset + 1));
           const data = await fetchWikipediaJson({
             list: 'search',
             srsearch: search,
             srnamespace: '0',
-            srlimit: String(batchSize),
-            sroffset: String(offset)
+            srlimit: '200',
+            srsort: 'random'
           }, controller);
 
           let titles = ((data.query && data.query.search) || [])
@@ -635,23 +618,29 @@
             .filter(title => !/^List of/i.test(title) && !title.includes(':'))
             .map(title => title.replace(/\s*\([^)]*film[^)]*\)\s*$/i, '').trim())
             .filter(title => title.length >= 2 && title.length <= 60);
-          titles = Array.from(new Set(titles));
 
-          if(titles.length < 5){
-            lastReason = category + ' returned too few usable films';
-            continue;
-          }
-
-          const tiers = { easy: [], medium: [], hard: [] };
-          shuffleArray(titles).forEach(title => {
+          titles.forEach(title => {
+            const key = title.toLowerCase();
+            if(seen.has(key)) return;
+            seen.add(key);
             tiers[difficultyForTitle(title)].push(title);
           });
-          return tiers;
+
+          const available = requiredDifficulty === 'mixed'
+            ? tiers.easy.length + tiers.medium.length + tiers.hard.length
+            : tiers[requiredDifficulty].length;
+          if(available >= 12) return tiers;
+          lastReason = category + ' did not provide enough ' + requiredDifficulty + ' titles';
         }catch(err){
           if(err.name === 'AbortError') throw err;
           lastReason = err.message;
         }
       }
+
+      const available = requiredDifficulty === 'mixed'
+        ? tiers.easy.length + tiers.medium.length + tiers.hard.length
+        : tiers[requiredDifficulty].length;
+      if(available > 0) return tiers;
       throw new Error(lastReason);
     }finally{
       clearTimeout(timeoutId);
@@ -660,13 +649,13 @@
 
   // A temporary failure in one language should not block the whole game.
   // The game continues with every selected language that loaded successfully.
-  async function fetchLiveMovies(languages){
+  async function fetchLiveMovies(languages, requiredDifficulty){
     const results = {};
     const failed = [];
 
     await Promise.all(languages.map(async lang => {
       try{
-        results[lang] = await fetchLanguageMovies(lang);
+        results[lang] = await fetchLanguageMovies(lang, requiredDifficulty);
       }catch(err){
         const reason = err.name === 'AbortError' ? 'timed out' : err.message;
         console.error('CineMime fetch failed for', lang, '—', reason);
@@ -758,12 +747,13 @@
     nextBtn.disabled = true;
     nextBtn.textContent = 'Fetching movies…';
     try{
-      const liveResult = await fetchLiveMovies(state.languages);
+      const liveResult = await fetchLiveMovies(state.languages, state.difficulty);
       state.movieSource = liveResult.movies;
       state.languages = state.languages.filter(lang => state.movieSource[lang]);
       if(liveResult.failed.length){
         console.warn('Continuing without:', liveResult.failed.join('; '));
       }
+      buildDeck();
     }catch(err){
       nextBtn.disabled = false;
       nextBtn.textContent = originalLabel;
@@ -773,7 +763,6 @@
     nextBtn.disabled = false;
     nextBtn.textContent = originalLabel;
 
-    buildDeck();
     goToScreen('game-screen');
     startTurnBanner();
   });
@@ -793,16 +782,8 @@
       });
     });
 
-    // Some random batches naturally have few titles in one heuristic tier.
-    // Fall back to the full live batch instead of allowing an empty deck.
     if(pool.length === 0){
-      state.languages.forEach(lang => {
-        ['easy','medium','hard'].forEach(tier => {
-          (source[lang][tier] || []).forEach(title => {
-            pool.push({ title, lang, difficulty: tier });
-          });
-        });
-      });
+      throw new Error('No ' + state.difficulty + ' movie titles were loaded. Please try again.');
     }
 
     const seen = new Set();
