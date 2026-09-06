@@ -582,50 +582,77 @@
     return 'hard';
   }
 
+  function wikipediaCategoryCandidates(lang){
+    const base = LANG_CATEGORY[lang].replace(/^Category:/, '');
+    if(lang === 'English') return [base];
+
+    // Wikipedia organizes Hindi, Tamil, and Malayalam films primarily into
+    // year-specific categories; their broad parent categories contain almost
+    // no individual movies. Shuffle recent years to keep each game fresh.
+    const latestCompleteYear = new Date().getUTCFullYear() - 1;
+    const years = [];
+    for(let year = latestCompleteYear; year >= 1990; year--) years.push(year);
+    return shuffleArray(years).map(year => `${year} ${lang}-language films`);
+  }
+
   async function fetchLanguageMovies(lang){
-    const category = LANG_CATEGORY[lang].replace(/^Category:/, '');
-    const search = `incategory:"${category}"`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const candidates = wikipediaCategoryCandidates(lang);
+    let lastReason = 'no films found';
 
     try{
-      // First learn the result count so the second request can choose a valid,
-      // genuinely random window of film titles.
-      const info = await fetchWikipediaJson({
-        list: 'search',
-        srsearch: search,
-        srnamespace: '0',
-        srlimit: '1'
-      }, controller);
-      const totalHits = Number(info.query && info.query.searchinfo && info.query.searchinfo.totalhits) || 0;
-      if(totalHits < 1) throw new Error('no films found');
+      // Try several randomly ordered year categories. This also handles the
+      // occasional year whose Wikipedia category is missing or too small.
+      for(const category of candidates.slice(0, 8)){
+        try{
+          const search = `incategory:"${category}"`;
+          const info = await fetchWikipediaJson({
+            list: 'search',
+            srsearch: search,
+            srnamespace: '0',
+            srlimit: '1'
+          }, controller);
+          const totalHits = Number(info.query && info.query.searchinfo && info.query.searchinfo.totalhits) || 0;
+          if(totalHits < 5){
+            lastReason = category + ' has too few films';
+            continue;
+          }
 
-      const batchSize = Math.min(200, totalHits);
-      // MediaWiki caps deep search offsets, so stay safely below that limit.
-      const maxOffset = Math.max(0, Math.min(totalHits - batchSize, 9800));
-      const offset = Math.floor(Math.random() * (maxOffset + 1));
-      const data = await fetchWikipediaJson({
-        list: 'search',
-        srsearch: search,
-        srnamespace: '0',
-        srlimit: String(batchSize),
-        sroffset: String(offset)
-      }, controller);
+          const batchSize = Math.min(200, totalHits);
+          const maxOffset = Math.max(0, Math.min(totalHits - batchSize, 9800));
+          const offset = Math.floor(Math.random() * (maxOffset + 1));
+          const data = await fetchWikipediaJson({
+            list: 'search',
+            srsearch: search,
+            srnamespace: '0',
+            srlimit: String(batchSize),
+            sroffset: String(offset)
+          }, controller);
 
-      let titles = ((data.query && data.query.search) || [])
-        .map(item => item.title)
-        .filter(title => !/^List of/i.test(title) && !title.includes(':'))
-        .map(title => title.replace(/\s*\([^)]*film[^)]*\)\s*$/i, '').trim())
-        .filter(title => title.length >= 2 && title.length <= 60);
-      titles = Array.from(new Set(titles));
+          let titles = ((data.query && data.query.search) || [])
+            .map(item => item.title)
+            .filter(title => !/^List of/i.test(title) && !title.includes(':'))
+            .map(title => title.replace(/\s*\([^)]*film[^)]*\)\s*$/i, '').trim())
+            .filter(title => title.length >= 2 && title.length <= 60);
+          titles = Array.from(new Set(titles));
 
-      if(titles.length < 5) throw new Error('not enough usable films found');
+          if(titles.length < 5){
+            lastReason = category + ' returned too few usable films';
+            continue;
+          }
 
-      const tiers = { easy: [], medium: [], hard: [] };
-      shuffleArray(titles).forEach(title => {
-        tiers[difficultyForTitle(title)].push(title);
-      });
-      return tiers;
+          const tiers = { easy: [], medium: [], hard: [] };
+          shuffleArray(titles).forEach(title => {
+            tiers[difficultyForTitle(title)].push(title);
+          });
+          return tiers;
+        }catch(err){
+          if(err.name === 'AbortError') throw err;
+          lastReason = err.message;
+        }
+      }
+      throw new Error(lastReason);
     }finally{
       clearTimeout(timeoutId);
     }
