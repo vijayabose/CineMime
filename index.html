@@ -556,55 +556,101 @@
     return a;
   }
 
-  // Fetch real film titles per language from Wikipedia's free public API.
-  // There is no built-in list to fall back to — if a language's fetch
-  // fails or comes back too thin, that language is reported as failed.
+  // Fetch real film titles from Wikipedia's free public API.
+  // Wikipedia search supports category filters and a random offset, which avoids
+  // serving the same alphabetical titles on every game.
+  async function fetchWikipediaJson(params, controller){
+    const url = new URL('https://en.wikipedia.org/w/api.php');
+    Object.entries({
+      action: 'query',
+      format: 'json',
+      origin: '*',
+      ...params
+    }).forEach(([key, value]) => url.searchParams.set(key, value));
+
+    const res = await fetch(url, { signal: controller.signal, mode: 'cors' });
+    if(!res.ok) throw new Error('Wikipedia returned HTTP ' + res.status);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.info || 'Wikipedia API error');
+    return data;
+  }
+
+  function difficultyForTitle(title){
+    const words = title.split(/\s+/).length;
+    if(words <= 2 && title.length <= 22) return 'easy';
+    if(words <= 5 && title.length <= 40) return 'medium';
+    return 'hard';
+  }
+
+  async function fetchLanguageMovies(lang){
+    const category = LANG_CATEGORY[lang].replace(/^Category:/, '');
+    const search = `incategory:"${category}"`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try{
+      // First learn the result count so the second request can choose a valid,
+      // genuinely random window of film titles.
+      const info = await fetchWikipediaJson({
+        list: 'search',
+        srsearch: search,
+        srnamespace: '0',
+        srlimit: '1'
+      }, controller);
+      const totalHits = Number(info.query && info.query.searchinfo && info.query.searchinfo.totalhits) || 0;
+      if(totalHits < 1) throw new Error('no films found');
+
+      const batchSize = Math.min(200, totalHits);
+      // MediaWiki caps deep search offsets, so stay safely below that limit.
+      const maxOffset = Math.max(0, Math.min(totalHits - batchSize, 9800));
+      const offset = Math.floor(Math.random() * (maxOffset + 1));
+      const data = await fetchWikipediaJson({
+        list: 'search',
+        srsearch: search,
+        srnamespace: '0',
+        srlimit: String(batchSize),
+        sroffset: String(offset)
+      }, controller);
+
+      let titles = ((data.query && data.query.search) || [])
+        .map(item => item.title)
+        .filter(title => !/^List of/i.test(title) && !title.includes(':'))
+        .map(title => title.replace(/\s*\([^)]*film[^)]*\)\s*$/i, '').trim())
+        .filter(title => title.length >= 2 && title.length <= 60);
+      titles = Array.from(new Set(titles));
+
+      if(titles.length < 5) throw new Error('not enough usable films found');
+
+      const tiers = { easy: [], medium: [], hard: [] };
+      shuffleArray(titles).forEach(title => {
+        tiers[difficultyForTitle(title)].push(title);
+      });
+      return tiers;
+    }finally{
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // A temporary failure in one language should not block the whole game.
+  // The game continues with every selected language that loaded successfully.
   async function fetchLiveMovies(languages){
     const results = {};
     const failed = [];
-    await Promise.all(languages.map(async (lang) => {
-      try{
-        const category = LANG_CATEGORY[lang];
-        const url = `https://en.wikipedia.org/w/api.php?action=query&list=categorymembers&cmtitle=${encodeURIComponent(category)}&cmlimit=200&cmtype=page&format=json&origin=*`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-        const res = await fetch(url, { signal: controller.signal, mode: 'cors' });
-        clearTimeout(timeoutId);
-        if(!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        if(data.error) throw new Error(data.error.info || 'API error');
-        const members = (data.query && data.query.categorymembers) || [];
-        let titles = members
-          .map(m => m.title)
-          .filter(t => !/^List of/i.test(t) && !t.includes(':'))
-          .map(t => t.replace(/\s*\([^)]*\)\s*$/, '').trim())
-          .filter(t => t.length >= 2 && t.length <= 45);
-        titles = Array.from(new Set(titles));
-        if(titles.length < 15) throw new Error(members.length + ' members found, only ' + titles.length + ' usable after filtering');
 
-        const tiers = { easy: [], medium: [], hard: [] };
-        titles.forEach(t => {
-          const words = t.split(/\s+/).length;
-          if(words <= 1) tiers.easy.push(t);
-          else if(words <= 3) tiers.medium.push(t);
-          else tiers.hard.push(t);
-        });
-        tiers.easy = shuffleArray(tiers.easy).slice(0, 40);
-        tiers.medium = shuffleArray(tiers.medium).slice(0, 40);
-        tiers.hard = shuffleArray(tiers.hard).slice(0, 40);
-        results[lang] = tiers;
+    await Promise.all(languages.map(async lang => {
+      try{
+        results[lang] = await fetchLanguageMovies(lang);
       }catch(err){
         const reason = err.name === 'AbortError' ? 'timed out' : err.message;
         console.error('CineMime fetch failed for', lang, '—', reason);
         failed.push(lang + ' (' + reason + ')');
       }
     }));
-    if(failed.length > 0){
-      const e = new Error('Could not fetch movies — ' + failed.join('; '));
-      e.failedLangs = failed;
-      throw e;
+
+    if(Object.keys(results).length === 0){
+      throw new Error('Wikipedia could not load movie titles. Check your connection and try again.');
     }
-    return results;
+    return { movies: results, failed };
   }
 
   function scrambleTitle(title){
@@ -685,7 +731,12 @@
     nextBtn.disabled = true;
     nextBtn.textContent = 'Fetching movies…';
     try{
-      state.movieSource = await fetchLiveMovies(state.languages);
+      const liveResult = await fetchLiveMovies(state.languages);
+      state.movieSource = liveResult.movies;
+      state.languages = state.languages.filter(lang => state.movieSource[lang]);
+      if(liveResult.failed.length){
+        console.warn('Continuing without:', liveResult.failed.join('; '));
+      }
     }catch(err){
       nextBtn.disabled = false;
       nextBtn.textContent = originalLabel;
@@ -702,13 +753,39 @@
 
   function buildDeck(){
     const source = state.movieSource;
-    const tiers = state.difficulty === 'mixed' ? ['easy','medium','hard'] : [state.difficulty];
+    const requestedTiers = state.difficulty === 'mixed'
+      ? ['easy','medium','hard']
+      : [state.difficulty];
     let pool = [];
+
     state.languages.forEach(lang => {
-      tiers.forEach(tier => {
-        (source[lang][tier] || []).forEach(title => pool.push({ title, lang, difficulty: tier }));
+      requestedTiers.forEach(tier => {
+        (source[lang][tier] || []).forEach(title => {
+          pool.push({ title, lang, difficulty: tier });
+        });
       });
     });
+
+    // Some random batches naturally have few titles in one heuristic tier.
+    // Fall back to the full live batch instead of allowing an empty deck.
+    if(pool.length === 0){
+      state.languages.forEach(lang => {
+        ['easy','medium','hard'].forEach(tier => {
+          (source[lang][tier] || []).forEach(title => {
+            pool.push({ title, lang, difficulty: tier });
+          });
+        });
+      });
+    }
+
+    const seen = new Set();
+    pool = pool.filter(movie => {
+      const key = movie.lang + ':' + movie.title.toLowerCase();
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     state.deck = shuffleArray(pool);
     state.deckPos = 0;
   }
