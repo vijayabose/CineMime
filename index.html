@@ -426,29 +426,15 @@
 (function(){
 
   // ---------- Movie deck ----------
-  const MOVIES = {
-    English: {
-      easy: ["Jaws","Frozen","Speed","Up","Cars","Ghost","Alien","Twister"],
-      medium: ["Finding Nemo","The Lion King","Home Alone","Jurassic Park","The Godfather","Toy Story","Back to the Future","Slumdog Millionaire"],
-      hard: ["Eternal Sunshine of the Spotless Mind","The Curious Case of Benjamin Button","Everything Everywhere All at Once","The Grand Budapest Hotel","Once Upon a Time in Hollywood","No Country for Old Men","The Shape of Water","Birdman"]
-    },
-    Hindi: {
-      easy: ["Sholay","Dangal","PK","Lagaan","Dhoom","Fan","Baazigar","Gadar"],
-      medium: ["3 Idiots","Gully Boy","Andaz Apna Apna","Dilwale Dulhania Le Jayenge","Queen","Barfi","Rang De Basanti","Chak De India"],
-      hard: ["Zindagi Na Milegi Dobara","Kabhi Khushi Kabhie Gham","Jab We Met","Ankhon Dekhi","Tumbbad","Andhadhun","Lage Raho Munna Bhai","Kahaani"]
-    },
-    Tamil: {
-      easy: ["Master","Kaithi","Vikram","Baashha","Theri","Bigil","Petta","Enthiran"],
-      medium: ["Vada Chennai","Kaakha Kaakha","Soorarai Pottru","Super Deluxe","96","Jigarthanda","Pariyerum Perumal","Asuran"],
-      hard: ["Aaranya Kaandam","Iruvar","Kaala","Vikram Vedha","Mandela","Visaranai","Peranbu","8 Thottakkal"]
-    },
-    Malayalam: {
-      easy: ["Lucifer","Charlie","Premam","Drishyam","Pulimurugan","Ustad Hotel","Bangalore Days","Mumbai Police"],
-      medium: ["Kumbalangi Nights","Angamaly Diaries","Maheshinte Prathikaaram","Manichitrathazhu","Thondimuthalum Driksakshiyum","Kammatti Paadam","Sudani from Nigeria","Virus"],
-      hard: ["Android Kunjappan Version 5.25","Ee Ma Yau","Joji","Jallikattu","Anjaam Pathiraa","Nna Thaan Case Kodu","C U Soon","Kala"]
-    }
-  };
+  // Movies are pulled live from Wikipedia — no built-in list is stored here.
+  const LANGUAGES = ["English","Hindi","Tamil","Malayalam"];
   const LANG_COLORS = { English:"#0A84FF", Hindi:"#FF9F0A", Tamil:"#FF375F", Malayalam:"#64D2FF" };
+  const LANG_CATEGORY = {
+    English: "Category:English-language films",
+    Hindi: "Category:Hindi-language films",
+    Tamil: "Category:Tamil-language films",
+    Malayalam: "Category:Malayalam-language films"
+  };
   const DIFFICULTIES = [
     { id:'easy', label:'Easy' },
     { id:'medium', label:'Medium' },
@@ -459,7 +445,7 @@
   // ---------- State ----------
   let state = {
     teams: [],
-    languages: Object.keys(MOVIES),
+    languages: LANGUAGES,
     timeLimit: 45,
     targetScore: 15,
     skipPenalty: false,
@@ -508,10 +494,10 @@
 
   // ---------- Setup: language chips ----------
   const langChipsEl = document.getElementById('lang-chips');
-  let selectedLangs = new Set(Object.keys(MOVIES));
+  let selectedLangs = new Set(LANGUAGES);
   function renderLangChips(){
     langChipsEl.innerHTML = '';
-    Object.keys(MOVIES).forEach(lang => {
+    LANGUAGES.forEach(lang => {
       const chip = document.createElement('div');
       chip.className = 'chip' + (selectedLangs.has(lang) ? ' selected' : '');
       chip.style.setProperty('--chip-color', LANG_COLORS[lang]);
@@ -570,6 +556,57 @@
     return a;
   }
 
+  // Fetch real film titles per language from Wikipedia's free public API.
+  // There is no built-in list to fall back to — if a language's fetch
+  // fails or comes back too thin, that language is reported as failed.
+  async function fetchLiveMovies(languages){
+    const results = {};
+    const failed = [];
+    await Promise.all(languages.map(async (lang) => {
+      try{
+        const category = LANG_CATEGORY[lang];
+        const url = `https://en.wikipedia.org/w/api.php?action=query&list=categorymembers&cmtitle=${encodeURIComponent(category)}&cmlimit=200&cmtype=page&format=json&origin=*`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const res = await fetch(url, { signal: controller.signal, mode: 'cors' });
+        clearTimeout(timeoutId);
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if(data.error) throw new Error(data.error.info || 'API error');
+        const members = (data.query && data.query.categorymembers) || [];
+        let titles = members
+          .map(m => m.title)
+          .filter(t => !/^List of/i.test(t) && !t.includes(':'))
+          .map(t => t.replace(/\s*\([^)]*\)\s*$/, '').trim())
+          .filter(t => t.length >= 2 && t.length <= 45);
+        titles = Array.from(new Set(titles));
+        if(titles.length < 15) throw new Error(members.length + ' members found, only ' + titles.length + ' usable after filtering');
+
+        const tiers = { easy: [], medium: [], hard: [] };
+        titles.forEach(t => {
+          const words = t.split(/\s+/).length;
+          if(words <= 1) tiers.easy.push(t);
+          else if(words <= 3) tiers.medium.push(t);
+          else tiers.hard.push(t);
+        });
+        tiers.easy = shuffleArray(tiers.easy).slice(0, 40);
+        tiers.medium = shuffleArray(tiers.medium).slice(0, 40);
+        tiers.hard = shuffleArray(tiers.hard).slice(0, 40);
+        results[lang] = tiers;
+      }catch(err){
+        const reason = err.name === 'AbortError' ? 'timed out' : err.message;
+        console.error('CineMime fetch failed for', lang, '—', reason);
+        failed.push(lang + ' (' + reason + ')');
+      }
+    }));
+    if(failed.length > 0){
+      const e = new Error('Could not fetch movies — ' + failed.join('; '));
+      e.failedLangs = failed;
+      throw e;
+    }
+    return results;
+  }
+
   function scrambleTitle(title){
     return title.split(' ').map(word => {
       if(word.length <= 3) return word;
@@ -619,7 +656,7 @@
     showStep(currentStep, 'back');
   });
 
-  nextBtn.addEventListener('click', () => {
+  nextBtn.addEventListener('click', async () => {
     if(currentStep === 1){
       const v = validateTeams();
       if(!v.ok){ errorEl.textContent = v.message; return; }
@@ -644,17 +681,32 @@
     state.targetScore = Math.max(3, +document.getElementById('target-score').value || 15);
     state.currentTeamIdx = 0;
 
+    const originalLabel = nextBtn.textContent;
+    nextBtn.disabled = true;
+    nextBtn.textContent = 'Fetching movies…';
+    try{
+      state.movieSource = await fetchLiveMovies(state.languages);
+    }catch(err){
+      nextBtn.disabled = false;
+      nextBtn.textContent = originalLabel;
+      errorEl.textContent = err.message || 'Could not fetch movies. Check your connection and try again.';
+      return;
+    }
+    nextBtn.disabled = false;
+    nextBtn.textContent = originalLabel;
+
     buildDeck();
     goToScreen('game-screen');
     startTurnBanner();
   });
 
   function buildDeck(){
+    const source = state.movieSource;
     const tiers = state.difficulty === 'mixed' ? ['easy','medium','hard'] : [state.difficulty];
     let pool = [];
     state.languages.forEach(lang => {
       tiers.forEach(tier => {
-        MOVIES[lang][tier].forEach(title => pool.push({ title, lang, difficulty: tier }));
+        (source[lang][tier] || []).forEach(title => pool.push({ title, lang, difficulty: tier }));
       });
     });
     state.deck = shuffleArray(pool);
