@@ -244,7 +244,7 @@
   }
   #active-turn{width:100%;}
   .ring-wrap{position:relative;width:112px;height:112px;}
-  .ring-wrap svg{transform:rotate(-90deg);width:112px;height:112px;}
+  .ring-wrap svg{display:block;transform:rotate(-90deg);width:112px;height:112px;overflow:visible;}
   .ring-bg{fill:none;stroke:#E8E8ED;stroke-width:8;}
   .ring-fg{fill:none;stroke:var(--blue);stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset 1s linear,stroke .3s;}
   .ring-time{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.85rem;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;}
@@ -396,7 +396,7 @@
 
       <div id="active-turn" style="display:none; flex-direction:column; align-items:center; gap:18px; z-index:1;">
         <div class="ring-wrap">
-          <svg width="126" height="126">
+          <svg width="126" height="126" viewBox="0 0 126 126" aria-label="Turn timer">
             <circle class="ring-bg" cx="63" cy="63" r="52"></circle>
             <circle class="ring-fg" id="ring-fg" cx="63" cy="63" r="52"></circle>
           </svg>
