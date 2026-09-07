@@ -1406,13 +1406,16 @@
   });
 
   document.getElementById('new-movie-btn').addEventListener('click', () => {
-    if(state.phase !== 'active') return;
+    if(!['ready','active','paused','timeout'].includes(state.phase)) return;
     const movie = nextMovie();
     if(!movie){ showToast('All movies have been shown — restart the game'); return; }
     clearInterval(state.timer);
+    state.timer = null;
     state.currentMovie = movie;
     state.timeLeft = state.timeLimit;
     state.timerEndsAt = null;
+    document.getElementById('timeout-actions').style.display = 'none';
+    document.getElementById('action-row').style.display = 'flex';
     renderMovie();
     prepareTimer();
     showToast('New movie ready');
