@@ -319,6 +319,10 @@
   .final-row:first-child .name::before{content:'🏆 ';}
   .final-row .score{font-weight:700;color:var(--text);}
   .ghost-btn{background:rgba(0,113,227,.07);border:0;color:var(--blue);border-radius:15px;padding:14px;font-size:.95rem;font-weight:650;width:100%;margin-top:10px;cursor:pointer;}
+  .share-btn{background:transparent;border:1px solid var(--border);color:var(--blue);border-radius:15px;padding:13px 16px;font-size:.9rem;font-weight:650;width:100%;margin-top:10px;cursor:pointer;}
+  .share-hint{text-align:center;color:var(--text-secondary);font-size:.76rem;line-height:1.4;margin:8px 8px 0;}
+  .restore-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);background:rgba(29,29,31,.94);color:#fff;padding:11px 16px;border-radius:999px;font-size:.82rem;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:20;white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden;text-overflow:ellipsis;}
+  .restore-toast.show{opacity:1;transform:translate(-50%,0);}
 
   @media(max-width:380px){
     .app{padding:18px 14px 28px;}
@@ -411,6 +415,8 @@
       <button class="ghost-btn" id="back-btn" style="display:none;">Back</button>
       <button class="primary-btn" id="next-btn">Next</button>
     </div>
+    <button class="share-btn" id="share-setup-btn">Share game link</button>
+    <p class="share-hint">Open the link on another phone to load the same teams and settings.</p>
   </div>
 
   <!-- GAME SCREEN -->
@@ -464,6 +470,7 @@
     <button class="primary-btn" id="next-turn-btn" style="display:none; margin-top:16px;">Next team's turn</button>
 
     <div class="score-strip" id="score-strip"></div>
+    <button class="share-btn" id="share-game-btn">Share game link</button>
   </div>
 
   <!-- WINNER SCREEN -->
@@ -478,6 +485,7 @@
   </div>
 
 </div>
+<div class="restore-toast" id="restore-toast" role="status" aria-live="polite"></div>
 
 <script>
 (function(){
@@ -514,8 +522,154 @@
     timer: null,
     timeLeft: 45,
     currentMovie: null,
-    detailRequestId: 0
+    detailRequestId: 0,
+    phase: 'setup',
+    turnResult: null,
+    turnPenalty: false,
+    timerEndsAt: null
   };
+
+  const SESSION_KEY = 'cinemime-session-v2';
+  const COOKIE_KEY = 'cinemime_setup';
+  const SESSION_VERSION = 2;
+
+  function safeTeams(value){
+    if(!Array.isArray(value)) return ['Team One','Team Two'];
+    const teams = value.map(v => String(v).trim().slice(0,40)).filter(Boolean).slice(0,8);
+    return teams.length >= 2 ? teams : ['Team One','Team Two'];
+  }
+
+  function safeLanguages(value){
+    if(!Array.isArray(value)) return LANGUAGES.slice();
+    const langs = value.filter(v => LANGUAGES.includes(v));
+    return langs.length ? Array.from(new Set(langs)) : LANGUAGES.slice();
+  }
+
+  function safeDifficulty(value){
+    return DIFFICULTIES.some(d => d.id === value) ? value : 'mixed';
+  }
+
+  function clampNumber(value, min, max, fallback){
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.round(number))) : fallback;
+  }
+
+  function getSetupConfig(){
+    const activeTeams = state.teams && state.teams.length
+      ? state.teams.map(team => team.name)
+      : state.setupTeams;
+    return {
+      teams: safeTeams(activeTeams),
+      languages: safeLanguages(state.languages && state.languages.length ? state.languages : Array.from(selectedLangs || LANGUAGES)),
+      difficulty: safeDifficulty(state.difficulty || selectedDifficulty),
+      timeLimit: clampNumber(document.getElementById('time-limit').value, 15, 180, 45),
+      targetScore: clampNumber(document.getElementById('target-score').value, 3, 99, 15),
+      skipPenalty: !!state.skipPenalty,
+      scramble: !!state.scramble
+    };
+  }
+
+  function setCookieSnapshot(config){
+    try{
+      document.cookie = COOKIE_KEY + '=' + encodeURIComponent(JSON.stringify(config)) + '; Max-Age=2592000; Path=/; SameSite=Lax';
+    }catch(err){
+      console.warn('Could not save setup cookie:', err);
+    }
+  }
+
+  function getCookieSnapshot(){
+    try{
+      const prefix = COOKIE_KEY + '=';
+      const part = document.cookie.split('; ').find(item => item.startsWith(prefix));
+      return part ? JSON.parse(decodeURIComponent(part.slice(prefix.length))) : null;
+    }catch(err){
+      return null;
+    }
+  }
+
+  function saveSession(){
+    try{
+      const config = getSetupConfig();
+      setCookieSnapshot(config);
+      const cleanState = { ...state, timer:null };
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        version: SESSION_VERSION,
+        currentStep,
+        selectedLangs: Array.from(selectedLangs),
+        selectedDifficulty,
+        config,
+        state: cleanState,
+        savedAt: Date.now()
+      }));
+    }catch(err){
+      console.warn('Could not save game session:', err);
+    }
+  }
+
+  function clearSession(){
+    try{ localStorage.removeItem(SESSION_KEY); }catch(err){}
+  }
+
+  function showToast(message){
+    const toast = document.getElementById('restore-toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(() => toast.classList.remove('show'), 2600);
+  }
+
+  function encodeShareConfig(config){
+    const bytes = new TextEncoder().encode(JSON.stringify(config));
+    let binary = '';
+    bytes.forEach(byte => binary += String.fromCharCode(byte));
+    return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+
+  function decodeShareConfig(value){
+    try{
+      const padded = value.replace(/-/g,'+').replace(/_/g,'/') + '==='.slice((value.length + 3) % 4);
+      const binary = atob(padded);
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes));
+    }catch(err){
+      return null;
+    }
+  }
+
+  function normalizedConfig(raw){
+    if(!raw || typeof raw !== 'object') return null;
+    return {
+      teams: safeTeams(raw.teams),
+      languages: safeLanguages(raw.languages),
+      difficulty: safeDifficulty(raw.difficulty),
+      timeLimit: clampNumber(raw.timeLimit, 15, 180, 45),
+      targetScore: clampNumber(raw.targetScore, 3, 99, 15),
+      skipPenalty: !!raw.skipPenalty,
+      scramble: !!raw.scramble
+    };
+  }
+
+  async function shareGame(){
+    const config = getSetupConfig();
+    const url = location.origin + location.pathname + '#game=' + encodeShareConfig(config);
+    const shareData = { title:'CineMime game', text:'Join our CineMime movie charades game!', url };
+    try{
+      if(navigator.share){
+        await navigator.share(shareData);
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      showToast('Game link copied');
+    }catch(err){
+      if(err && err.name === 'AbortError') return;
+      try{
+        await navigator.clipboard.writeText(url);
+        showToast('Game link copied');
+      }catch(copyErr){
+        window.prompt('Copy this CineMime game link:', url);
+      }
+    }
+  }
 
   // ---------- Setup: team rows ----------
   const teamRowsEl = document.getElementById('team-rows');
@@ -532,12 +686,14 @@
     teamRowsEl.querySelectorAll('input').forEach(inp => {
       inp.addEventListener('input', e => {
         state.setupTeams[+e.target.dataset.idx] = e.target.value;
+        saveSession();
       });
     });
     teamRowsEl.querySelectorAll('[data-remove]').forEach(btn => {
       btn.addEventListener('click', e => {
         state.setupTeams.splice(+e.target.dataset.remove, 1);
         renderTeamRows();
+        saveSession();
       });
     });
   }
@@ -548,6 +704,7 @@
     if(state.setupTeams.length >= 8) return;
     state.setupTeams.push('Team ' + (state.setupTeams.length + 1));
     renderTeamRows();
+    saveSession();
   });
 
   // ---------- Setup: language chips ----------
@@ -567,6 +724,8 @@
           selectedLangs.add(lang);
         }
         renderLangChips();
+        state.languages = Array.from(selectedLangs);
+        saveSession();
       });
       langChipsEl.appendChild(chip);
     });
@@ -584,7 +743,9 @@
       seg.textContent = d.label;
       seg.addEventListener('click', () => {
         selectedDifficulty = d.id;
+        state.difficulty = selectedDifficulty;
         renderDifficultySeg();
+        saveSession();
       });
       difficultySegEl.appendChild(seg);
     });
@@ -593,14 +754,18 @@
 
   function setupToggle(id, key, defaultVal){
     const el = document.getElementById(id);
-    let val = defaultVal;
-    if(val) el.classList.add('on');
+    if(typeof state[key] !== 'boolean') state[key] = defaultVal;
+    el.classList.toggle('on', state[key]);
     el.addEventListener('click', () => {
-      val = !val;
-      el.classList.toggle('on', val);
-      state[key] = val;
+      state[key] = !state[key];
+      el.classList.toggle('on', state[key]);
+      saveSession();
     });
-    state[key] = val;
+  }
+
+  function renderToggles(){
+    document.getElementById('skip-penalty-toggle').classList.toggle('on', !!state.skipPenalty);
+    document.getElementById('scramble-toggle').classList.toggle('on', !!state.scramble);
   }
   setupToggle('skip-penalty-toggle', 'skipPenalty', false);
   setupToggle('scramble-toggle', 'scramble', false);
@@ -896,6 +1061,8 @@
     backBtn.style.display = n > 1 ? 'block' : 'none';
     nextBtn.textContent = n === TOTAL_STEPS ? 'Start the show' : 'Next';
     errorEl.textContent = '';
+    state.phase = 'setup';
+    saveSession();
   }
 
   backBtn.addEventListener('click', () => {
@@ -928,6 +1095,8 @@
     state.timeLimit = Math.max(15, +document.getElementById('time-limit').value || 45);
     state.targetScore = Math.max(3, +document.getElementById('target-score').value || 15);
     state.currentTeamIdx = 0;
+    state.phase = 'setup';
+    saveSession();
 
     const originalLabel = nextBtn.textContent;
     nextBtn.disabled = true;
@@ -952,6 +1121,11 @@
     goToScreen('game-screen');
     startTurnBanner();
   });
+
+  document.getElementById('time-limit').addEventListener('input', saveSession);
+  document.getElementById('target-score').addEventListener('input', saveSession);
+  document.getElementById('share-setup-btn').addEventListener('click', shareGame);
+  document.getElementById('share-game-btn').addEventListener('click', shareGame);
 
   function buildDeck(){
     const source = state.movieSource;
@@ -1020,7 +1194,13 @@
     document.getElementById('action-row').style.display = 'none';
     document.getElementById('next-turn-btn').style.display = 'none';
     state.turnScore = 0;
+    state.currentMovie = null;
+    state.phase = 'pre';
+    state.turnResult = null;
+    state.turnPenalty = false;
+    state.timerEndsAt = null;
     renderScoreStrip();
+    saveSession();
   }
 
   document.getElementById('reveal-btn').addEventListener('click', () => {
@@ -1029,6 +1209,7 @@
     document.getElementById('action-row').style.display = 'flex';
     state.timeLeft = state.timeLimit;
     state.currentMovie = nextMovie();
+    state.phase = 'active';
     renderMovie();
     startTimer();
   });
@@ -1048,19 +1229,23 @@
   const ringFg = document.getElementById('ring-fg');
   ringFg.style.strokeDasharray = RING_CIRC;
 
-  function startTimer(){
-    updateRing();
-    document.getElementById('ring-time').textContent = state.timeLeft;
-    clearInterval(state.timer);
-    state.timer = setInterval(() => {
-      state.timeLeft--;
-      document.getElementById('ring-time').textContent = Math.max(state.timeLeft, 0);
+  function startTimer(resuming){
+    if(!resuming || !state.timerEndsAt){
+      state.timerEndsAt = Date.now() + state.timeLeft * 1000;
+    }
+    const tick = () => {
+      state.timeLeft = Math.max(0, Math.ceil((state.timerEndsAt - Date.now()) / 1000));
+      document.getElementById('ring-time').textContent = state.timeLeft;
       updateRing();
       if(state.timeLeft <= 0){
         clearInterval(state.timer);
         endTurn('timeout');
       }
-    }, 1000);
+    };
+    clearInterval(state.timer);
+    tick();
+    if(state.timeLeft > 0) state.timer = setInterval(tick, 250);
+    saveSession();
   }
 
   function updateRing(){
@@ -1095,8 +1280,8 @@
     return false;
   }
 
-  function endTurn(result, penalty){
-    clearInterval(state.timer);
+  function renderEndedTurn(result, penalty){
+    document.getElementById('pre-reveal').style.display = 'none';
     document.getElementById('active-turn').style.display = 'none';
     document.getElementById('action-row').style.display = 'none';
     document.getElementById('turn-end').style.display = 'flex';
@@ -1119,8 +1304,19 @@
     }
 
     renderScoreStrip();
-    if(result === 'correct' && checkWin()) return;
     document.getElementById('next-turn-btn').style.display = 'block';
+  }
+
+  function endTurn(result, penalty){
+    clearInterval(state.timer);
+    state.timer = null;
+    state.timerEndsAt = null;
+    state.phase = 'end';
+    state.turnResult = result;
+    state.turnPenalty = !!penalty;
+    renderEndedTurn(result, penalty);
+    saveSession();
+    if(result === 'correct' && checkWin()) return;
   }
 
   document.getElementById('next-turn-btn').addEventListener('click', () => {
@@ -1141,6 +1337,7 @@
 
   // ---------- Winner screen ----------
   function showWinner(){
+    state.phase = 'winner';
     goToScreen('winner-screen');
     const sorted = state.teams.slice().sort((a,b) => b.score - a.score);
     document.getElementById('winner-name').textContent = sorted[0].name + ' wins';
@@ -1152,6 +1349,7 @@
       row.innerHTML = `<span class="name">${t.name}</span><span class="score">${t.score}</span>`;
       finalEl.appendChild(row);
     });
+    saveSession();
   }
 
   document.getElementById('rematch-btn').addEventListener('click', () => {
@@ -1163,10 +1361,124 @@
   });
 
   document.getElementById('new-game-btn').addEventListener('click', () => {
+    clearInterval(state.timer);
+    clearSession();
+    state.teams = [];
+    state.deck = [];
+    state.movieSource = null;
+    state.currentMovie = null;
+    state.setupTeams = ['Team One','Team Two'];
+    selectedLangs = new Set(LANGUAGES);
+    selectedDifficulty = 'mixed';
+    state.languages = LANGUAGES.slice();
+    state.difficulty = 'mixed';
+    state.skipPenalty = false;
+    state.scramble = false;
+    document.getElementById('time-limit').value = 45;
+    document.getElementById('target-score').value = 15;
+    renderTeamRows();
+    renderLangChips();
+    renderDifficultySeg();
+    renderToggles();
     currentStep = 1;
     showStep(1, 'back');
     goToScreen('setup-screen');
   });
+
+  function applyConfig(config){
+    state.setupTeams = safeTeams(config.teams);
+    state.languages = safeLanguages(config.languages);
+    selectedLangs = new Set(state.languages);
+    state.difficulty = safeDifficulty(config.difficulty);
+    selectedDifficulty = state.difficulty;
+    state.timeLimit = config.timeLimit;
+    state.targetScore = config.targetScore;
+    state.skipPenalty = config.skipPenalty;
+    state.scramble = config.scramble;
+    document.getElementById('time-limit').value = config.timeLimit;
+    document.getElementById('target-score').value = config.targetScore;
+    renderTeamRows();
+    renderLangChips();
+    renderDifficultySeg();
+    renderToggles();
+  }
+
+  function restoreActiveTurn(){
+    goToScreen('game-screen');
+    document.getElementById('current-team-name').textContent = state.teams[state.currentTeamIdx].name;
+    document.getElementById('pre-reveal').style.display = 'none';
+    document.getElementById('active-turn').style.display = 'flex';
+    document.getElementById('turn-end').style.display = 'none';
+    document.getElementById('action-row').style.display = 'flex';
+    document.getElementById('next-turn-btn').style.display = 'none';
+    renderScoreStrip();
+    renderMovie();
+    state.timeLeft = Math.max(0, Math.ceil((state.timerEndsAt - Date.now()) / 1000));
+    if(state.timeLeft <= 0) endTurn('timeout');
+    else startTimer(true);
+  }
+
+  function restoreSession(){
+    const hashParams = new URLSearchParams(location.hash.slice(1));
+    const shared = normalizedConfig(decodeShareConfig(hashParams.get('game') || ''));
+    if(shared){
+      clearInterval(state.timer);
+      clearSession();
+      applyConfig(shared);
+      state.teams = [];
+      state.deck = [];
+      state.currentMovie = null;
+      state.phase = 'setup';
+      currentStep = 4;
+      goToScreen('setup-screen');
+      showStep(4, 'fwd');
+      history.replaceState(null, '', location.pathname + location.search + location.hash);
+      showToast('Shared game loaded — tap Start the show');
+      return;
+    }
+
+    let saved = null;
+    try{ saved = JSON.parse(localStorage.getItem(SESSION_KEY)); }catch(err){}
+    if(saved && saved.version === SESSION_VERSION && saved.state){
+      const config = normalizedConfig(saved.config) || normalizedConfig(getCookieSnapshot());
+      if(config) applyConfig(config);
+      state = { ...state, ...saved.state, timer:null, detailRequestId:0 };
+      state.setupTeams = safeTeams(state.setupTeams || (config && config.teams));
+      selectedLangs = new Set(safeLanguages(saved.selectedLangs || state.languages));
+      selectedDifficulty = safeDifficulty(saved.selectedDifficulty || state.difficulty);
+      renderTeamRows();
+      renderLangChips();
+      renderDifficultySeg();
+      renderToggles();
+      currentStep = clampNumber(saved.currentStep, 1, TOTAL_STEPS, 1);
+
+      if(state.phase === 'active' && state.currentMovie && state.timerEndsAt){
+        restoreActiveTurn();
+      }else if(state.phase === 'end' && state.currentMovie && state.teams.length){
+        goToScreen('game-screen');
+        document.getElementById('current-team-name').textContent = state.teams[state.currentTeamIdx].name;
+        renderEndedTurn(state.turnResult || 'timeout', !!state.turnPenalty);
+      }else if(state.phase === 'winner' && state.teams.length){
+        showWinner();
+      }else if(state.phase === 'pre' && state.teams.length && state.deck.length){
+        goToScreen('game-screen');
+        startTurnBanner();
+      }else{
+        state.phase = 'setup';
+        goToScreen('setup-screen');
+        showStep(currentStep, 'fwd');
+      }
+      showToast('Game restored');
+      return;
+    }
+
+    const cookieConfig = normalizedConfig(getCookieSnapshot());
+    if(cookieConfig) applyConfig(cookieConfig);
+    goToScreen('setup-screen');
+    showStep(1, 'fwd');
+  }
+
+  restoreSession();
 
 })();
 </script>
