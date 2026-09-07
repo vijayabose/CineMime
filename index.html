@@ -263,7 +263,6 @@
   }
   .lang-tag .dot{width:7px;height:7px;border-radius:50%;}
   .movie-title{font-size:1.8rem;font-weight:700;color:var(--text);line-height:1.22;word-break:break-word;letter-spacing:-.03em;}
-  .movie-title.scrambled{letter-spacing:2px;color:var(--teal);}
   .hidden-overlay{z-index:2;text-align:center;display:flex;flex-direction:column;align-items:center;gap:18px;}
   .hidden-overlay::before{content:'🎬';font-size:2.8rem;}
   .hidden-overlay p{color:var(--text-secondary);font-size:.94rem;max-width:270px;line-height:1.5;margin:0;font-weight:400;}
@@ -273,6 +272,8 @@
   .skip-btn:active,.correct-btn:active{transform:scale(.985);opacity:.8;}
   .skip-btn{flex:1;background:#E9E9ED;color:var(--text-secondary);}
   .correct-btn{flex:1.7;background:var(--blue);color:#fff;box-shadow:0 8px 20px rgba(0,113,227,.18);}
+  .new-movie-btn{border:0;background:rgba(0,113,227,.08);color:var(--blue);border-radius:999px;padding:9px 14px;font-size:.78rem;font-weight:700;cursor:pointer;}
+  .restart-game-btn{display:block;margin:14px auto 0;border:0;background:transparent;color:var(--text-secondary);padding:10px 14px;font-size:.78rem;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
   .turn-end{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;z-index:2;width:100%;}
   .turn-end .who{color:var(--text-secondary);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;}
   .turn-end .team-result-name{font-size:2rem;font-weight:750;letter-spacing:-.035em;color:var(--text);line-height:1.12;}
@@ -394,8 +395,6 @@
   .final-row:first-child .name::before{content:'🏆 ';}
   .final-row .score{font-weight:700;color:var(--text);}
   .ghost-btn{background:rgba(0,113,227,.07);border:0;color:var(--blue);border-radius:15px;padding:14px;font-size:.95rem;font-weight:650;width:100%;margin-top:10px;cursor:pointer;}
-  .share-btn{background:transparent;border:1px solid var(--border);color:var(--blue);border-radius:15px;padding:13px 16px;font-size:.9rem;font-weight:650;width:100%;margin-top:10px;cursor:pointer;}
-  .share-hint{text-align:center;color:var(--text-secondary);font-size:.76rem;line-height:1.4;margin:8px 8px 0;}
   .restore-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);background:rgba(29,29,31,.94);color:#fff;padding:11px 16px;border-radius:999px;font-size:.82rem;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:20;white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden;text-overflow:ellipsis;}
   .restore-toast.show{opacity:1;transform:translate(-50%,0);}
 
@@ -475,13 +474,6 @@
           </div>
           <div class="switch" id="skip-penalty-toggle"></div>
         </div>
-        <div class="toggle-row">
-          <div>
-            <div class="label">Scrambled-letters mode</div>
-            <div class="sub">Actor sees the title with letters shuffled — extra challenge reading it fast</div>
-          </div>
-          <div class="switch" id="scramble-toggle"></div>
-        </div>
       </div>
     </div>
 
@@ -490,8 +482,6 @@
       <button class="ghost-btn" id="back-btn" style="display:none;">Back</button>
       <button class="primary-btn" id="next-btn">Next</button>
     </div>
-    <button class="share-btn" id="share-setup-btn">Share game link</button>
-    <p class="share-hint">Open the link on another phone to load the same teams and settings.</p>
   </div>
 
   <!-- GAME SCREEN -->
@@ -528,6 +518,7 @@
             <a class="reveal-link" id="reveal-wiki-link" href="#" target="_blank" rel="noopener" hidden>Wikipedia ↗</a>
           </div>
         </div>
+        <button class="new-movie-btn" id="new-movie-btn">↻ New movie</button>
       </div>
 
       <div class="turn-end" id="turn-end" style="display:none;">
@@ -547,6 +538,7 @@
     <button class="primary-btn" id="next-turn-btn" style="display:none; margin-top:16px;">Next team's turn</button>
 
     <div class="score-strip" id="score-strip"></div>
+    <button class="restart-game-btn" id="restart-game-btn">Restart game</button>
   </div>
 
   <!-- WINNER SCREEN -->
@@ -598,8 +590,8 @@
     timeLimit: 45,
     targetScore: 15,
     skipPenalty: false,
-    scramble: false,
     deck: [],
+    seenMovieKeys: [],
     deckPos: 0,
     currentTeamIdx: 0,
     turnScore: 0,
@@ -648,8 +640,7 @@
       difficulty: safeDifficulty(state.difficulty || selectedDifficulty),
       timeLimit: clampNumber(document.getElementById('time-limit').value, 15, 180, 45),
       targetScore: clampNumber(document.getElementById('target-score').value, 3, 99, 15),
-      skipPenalty: !!state.skipPenalty,
-      scramble: !!state.scramble
+      skipPenalty: !!state.skipPenalty
     };
   }
 
@@ -672,21 +663,26 @@
   }
 
   function saveSession(){
+    const config = getSetupConfig();
+    setCookieSnapshot(config);
+    const compactState = {
+      teams:state.teams, setupTeams:state.setupTeams, languages:state.languages,
+      difficulty:state.difficulty, timeLimit:state.timeLimit, targetScore:state.targetScore,
+      skipPenalty:state.skipPenalty, deck:state.deck, deckPos:state.deckPos,
+      seenMovieKeys:state.seenMovieKeys, currentTeamIdx:state.currentTeamIdx,
+      turnScore:state.turnScore, timeLeft:state.timeLeft, currentMovie:state.currentMovie,
+      phase:state.phase, turnResult:state.turnResult, turnPenalty:state.turnPenalty,
+      timerEndsAt:state.timerEndsAt
+    };
     try{
-      const config = getSetupConfig();
-      setCookieSnapshot(config);
-      const cleanState = { ...state, timer:null };
       localStorage.setItem(SESSION_KEY, JSON.stringify({
-        version: SESSION_VERSION,
-        currentStep,
-        selectedLangs: Array.from(selectedLangs),
-        selectedDifficulty,
-        config,
-        state: cleanState,
-        savedAt: Date.now()
+        version:SESSION_VERSION, currentStep,
+        selectedLangs:Array.from(selectedLangs), selectedDifficulty,
+        config, state:compactState, savedAt:Date.now()
       }));
     }catch(err){
-      console.warn('Could not save game session:', err);
+      console.warn('Could not save compact game session:', err);
+      showToast('This browser could not save the game');
     }
   }
 
@@ -702,24 +698,6 @@
     showToast.timer = setTimeout(() => toast.classList.remove('show'), 2600);
   }
 
-  function encodeShareConfig(config){
-    const bytes = new TextEncoder().encode(JSON.stringify(config));
-    let binary = '';
-    bytes.forEach(byte => binary += String.fromCharCode(byte));
-    return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  }
-
-  function decodeShareConfig(value){
-    try{
-      const padded = value.replace(/-/g,'+').replace(/_/g,'/') + '==='.slice((value.length + 3) % 4);
-      const binary = atob(padded);
-      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
-      return JSON.parse(new TextDecoder().decode(bytes));
-    }catch(err){
-      return null;
-    }
-  }
-
   function normalizedConfig(raw){
     if(!raw || typeof raw !== 'object') return null;
     return {
@@ -728,32 +706,10 @@
       difficulty: safeDifficulty(raw.difficulty),
       timeLimit: clampNumber(raw.timeLimit, 15, 180, 45),
       targetScore: clampNumber(raw.targetScore, 3, 99, 15),
-      skipPenalty: !!raw.skipPenalty,
-      scramble: !!raw.scramble
+      skipPenalty: !!raw.skipPenalty
     };
   }
 
-  async function shareGame(){
-    const config = getSetupConfig();
-    const url = location.origin + location.pathname + '#game=' + encodeShareConfig(config);
-    const shareData = { title:'CineMime game', text:'Join our CineMime movie charades game!', url };
-    try{
-      if(navigator.share){
-        await navigator.share(shareData);
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      showToast('Game link copied');
-    }catch(err){
-      if(err && err.name === 'AbortError') return;
-      try{
-        await navigator.clipboard.writeText(url);
-        showToast('Game link copied');
-      }catch(copyErr){
-        window.prompt('Copy this CineMime game link:', url);
-      }
-    }
-  }
 
   // ---------- Setup: team rows ----------
   const teamRowsEl = document.getElementById('team-rows');
@@ -849,10 +805,8 @@
 
   function renderToggles(){
     document.getElementById('skip-penalty-toggle').classList.toggle('on', !!state.skipPenalty);
-    document.getElementById('scramble-toggle').classList.toggle('on', !!state.scramble);
   }
   setupToggle('skip-penalty-toggle', 'skipPenalty', false);
-  setupToggle('scramble-toggle', 'scramble', false);
 
   function shuffleArray(arr){
     const a = arr.slice();
@@ -1104,18 +1058,6 @@
     }
   }
 
-  function scrambleTitle(title){
-    return title.split(' ').map(word => {
-      if(word.length <= 3) return word;
-      const letters = word.split('');
-      const shuffled = shuffleArray(letters);
-      if(shuffled.join('') === word && letters.length > 1){
-        [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
-      }
-      return shuffled.join('');
-    }).join(' ');
-  }
-
   // ---------- Setup wizard navigation ----------
   const TOTAL_STEPS = 4;
   const STEP_TITLES = { 1:'Teams', 2:'Languages', 3:'Difficulty', 4:'Match settings' };
@@ -1208,7 +1150,6 @@
 
   document.getElementById('time-limit').addEventListener('input', saveSession);
   document.getElementById('target-score').addEventListener('input', saveSession);
-  document.getElementById('share-setup-btn').addEventListener('click', shareGame);
 
   function buildDeck(){
     const source = state.movieSource;
@@ -1242,21 +1183,25 @@
 
     state.deck = shuffleArray(pool);
     state.deckPos = 0;
+    state.seenMovieKeys = [];
+  }
+
+  function movieKey(movie){
+    return movie && movie.title ? movie.title.trim().toLowerCase() : '';
   }
 
   function nextMovie(){
-    if(state.deckPos >= state.deck.length){
-      let reshuffled = shuffleArray(state.deck);
-      const lastShown = state.deck[state.deck.length - 1];
-      if(reshuffled.length > 1 && reshuffled[0].title === lastShown.title){
-        [reshuffled[0], reshuffled[1]] = [reshuffled[1], reshuffled[0]];
-      }
-      state.deck = reshuffled;
-      state.deckPos = 0;
+    const seen = new Set(Array.isArray(state.seenMovieKeys) ? state.seenMovieKeys : []);
+    while(state.deckPos < state.deck.length){
+      const movie = state.deck[state.deckPos++];
+      const key = movieKey(movie);
+      if(!key || seen.has(key)) continue;
+      seen.add(key);
+      state.seenMovieKeys = Array.from(seen);
+      saveSession();
+      return movie;
     }
-    const movie = state.deck[state.deckPos];
-    state.deckPos++;
-    return movie;
+    return null;
   }
 
   // ---------- Screen switching ----------
@@ -1287,11 +1232,13 @@
   }
 
   document.getElementById('reveal-btn').addEventListener('click', () => {
+    const movie = nextMovie();
+    if(!movie){ showToast('All movies have been shown — restart the game'); return; }
     document.getElementById('pre-reveal').style.display = 'none';
     document.getElementById('active-turn').style.display = 'flex';
     document.getElementById('action-row').style.display = 'flex';
     state.timeLeft = state.timeLimit;
-    state.currentMovie = nextMovie();
+    state.currentMovie = movie;
     state.phase = 'active';
     renderMovie();
     startTimer();
@@ -1303,8 +1250,7 @@
     const tierLabel = m.difficulty.charAt(0).toUpperCase() + m.difficulty.slice(1);
     document.getElementById('active-lang-label').textContent = m.lang + ' · ' + tierLabel;
     const titleEl = document.getElementById('movie-title');
-    titleEl.textContent = state.scramble ? scrambleTitle(m.title) : m.title;
-    titleEl.classList.toggle('scrambled', state.scramble);
+    titleEl.textContent = m.title;
     loadMovieRevealDetails(m);
   }
 
@@ -1346,12 +1292,26 @@
 
   document.getElementById('skip-btn').addEventListener('click', () => {
     if(state.timeLeft <= 0) return;
-    let penalty = false;
+    clearInterval(state.timer);
     if(state.skipPenalty){
       state.teams[state.currentTeamIdx].score = Math.max(0, state.teams[state.currentTeamIdx].score - 1);
-      penalty = true;
     }
-    endTurn('skipped', penalty);
+    state.currentTeamIdx = (state.currentTeamIdx + 1) % state.teams.length;
+    startTurnBanner();
+    showToast(state.skipPenalty ? 'Skipped · 1 point deducted' : 'Skipped · next team');
+  });
+
+  document.getElementById('new-movie-btn').addEventListener('click', () => {
+    if(state.phase !== 'active') return;
+    const movie = nextMovie();
+    if(!movie){ showToast('All movies have been shown — restart the game'); return; }
+    clearInterval(state.timer);
+    state.currentMovie = movie;
+    state.timeLeft = state.timeLimit;
+    state.timerEndsAt = null;
+    renderMovie();
+    startTimer();
+    showToast('New movie');
   });
 
   function checkWin(){
@@ -1465,19 +1425,44 @@
     saveSession();
   }
 
-  document.getElementById('rematch-btn').addEventListener('click', () => {
-    state.teams.forEach(t => t.score = 0);
-    state.currentTeamIdx = 0;
-    buildDeck();
-    goToScreen('game-screen');
-    startTurnBanner();
-  });
+  async function restartSameGame(askFirst){
+    if(askFirst && !window.confirm('Restart this game? Scores and shown-movie history will be cleared.')) return;
+    clearInterval(state.timer);
+    const button = document.getElementById('restart-game-btn');
+    const oldLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Restarting…';
+    try{
+      if(!state.movieSource){
+        const liveResult = await fetchLiveMovies(state.languages, state.difficulty);
+        state.movieSource = liveResult.movies;
+        state.languages = state.languages.filter(lang => state.movieSource[lang]);
+      }
+      state.teams.forEach(team => team.score = 0);
+      state.currentTeamIdx = 0;
+      state.currentMovie = null;
+      state.seenMovieKeys = [];
+      buildDeck();
+      goToScreen('game-screen');
+      startTurnBanner();
+      showToast('Game restarted');
+    }catch(err){
+      showToast(err.message || 'Could not restart the game');
+    }finally{
+      button.disabled = false;
+      button.textContent = oldLabel;
+    }
+  }
+
+  document.getElementById('restart-game-btn').addEventListener('click', () => restartSameGame(true));
+  document.getElementById('rematch-btn').addEventListener('click', () => restartSameGame(false));
 
   document.getElementById('new-game-btn').addEventListener('click', () => {
     clearInterval(state.timer);
     clearSession();
     state.teams = [];
     state.deck = [];
+    state.seenMovieKeys = [];
     state.movieSource = null;
     state.currentMovie = null;
     state.setupTeams = ['Team One','Team Two'];
@@ -1486,7 +1471,6 @@
     state.languages = LANGUAGES.slice();
     state.difficulty = 'mixed';
     state.skipPenalty = false;
-    state.scramble = false;
     document.getElementById('time-limit').value = 45;
     document.getElementById('target-score').value = 15;
     renderTeamRows();
@@ -1544,7 +1528,6 @@
     state.timeLimit = config.timeLimit;
     state.targetScore = config.targetScore;
     state.skipPenalty = config.skipPenalty;
-    state.scramble = config.scramble;
     document.getElementById('time-limit').value = config.timeLimit;
     document.getElementById('target-score').value = config.targetScore;
     renderTeamRows();
@@ -1569,31 +1552,17 @@
   }
 
   function restoreSession(){
-    const hashParams = new URLSearchParams(location.hash.slice(1));
-    const shared = normalizedConfig(decodeShareConfig(hashParams.get('game') || ''));
-    if(shared){
-      clearInterval(state.timer);
-      clearSession();
-      applyConfig(shared);
-      state.teams = [];
-      state.deck = [];
-      state.currentMovie = null;
-      state.phase = 'setup';
-      currentStep = 4;
-      goToScreen('setup-screen');
-      showStep(4, 'fwd');
-      history.replaceState(null, '', location.pathname + location.search + location.hash);
-      showToast('Shared game loaded — tap Start the show');
-      return;
-    }
-
     let saved = null;
     try{ saved = JSON.parse(localStorage.getItem(SESSION_KEY)); }catch(err){}
     if(saved && saved.version === SESSION_VERSION && saved.state){
       const config = normalizedConfig(saved.config) || normalizedConfig(getCookieSnapshot());
       if(config) applyConfig(config);
       state = { ...state, ...saved.state, timer:null, detailRequestId:0 };
+      delete state.movieSource;
       state.setupTeams = safeTeams(state.setupTeams || (config && config.teams));
+      if(!Array.isArray(state.seenMovieKeys) || state.seenMovieKeys.length === 0){
+        state.seenMovieKeys = (state.deck || []).slice(0, state.deckPos || 0).map(movieKey).filter(Boolean);
+      }
       selectedLangs = new Set(safeLanguages(saved.selectedLangs || state.languages));
       selectedDifficulty = safeDifficulty(saved.selectedDifficulty || state.difficulty);
       renderTeamRows();
