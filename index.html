@@ -276,6 +276,39 @@
   .turn-end{text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;z-index:2;}
   .turn-end .who{color:var(--text-secondary);font-size:.82rem;font-weight:500;}
   .turn-end .big{font-size:2.7rem;font-weight:700;color:var(--text);}
+  .reveal-details{
+    width:100%;
+    display:none;
+    grid-template-columns:82px minmax(0,1fr);
+    gap:14px;
+    align-items:start;
+    text-align:left;
+    background:var(--card-elevated);
+    border-radius:16px;
+    padding:12px;
+    margin-top:6px;
+  }
+  .reveal-details.no-poster{grid-template-columns:1fr;}
+  .reveal-poster{
+    width:82px;
+    aspect-ratio:2/3;
+    object-fit:cover;
+    border-radius:11px;
+    background:#DDDDE2;
+    box-shadow:0 4px 12px rgba(0,0,0,.10);
+  }
+  .reveal-copy{min-width:0;}
+  .reveal-label{
+    color:var(--text-secondary);
+    font-size:.72rem;
+    font-weight:650;
+    text-transform:uppercase;
+    letter-spacing:.07em;
+    margin-bottom:6px;
+  }
+  .reveal-cast{display:grid;gap:4px;color:var(--text);font-size:.84rem;line-height:1.3;}
+  .reveal-cast span{display:block;}
+  .reveal-link{display:inline-block;margin-top:8px;color:var(--blue);font-size:.8rem;font-weight:600;text-decoration:none;}
   #next-turn-btn{margin-top:2px!important;}
 
   .winner-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:8px;background:rgba(255,255,255,.9);border-radius:28px;padding:28px;box-shadow:0 16px 42px rgba(0,0,0,.07);}
@@ -412,6 +445,14 @@
         <div class="who" id="turn-end-who">Time's up</div>
         <div class="big" id="turn-end-score">+0</div>
         <p style="color:var(--text-secondary); font-size:0.92rem; margin:0; font-weight:600;" id="turn-end-movie"></p>
+        <div class="reveal-details" id="reveal-details" aria-live="polite">
+          <img class="reveal-poster" id="reveal-poster" alt="" hidden>
+          <div class="reveal-copy">
+            <div class="reveal-label">Starring</div>
+            <div class="reveal-cast" id="reveal-cast"><span>Loading movie details…</span></div>
+            <a class="reveal-link" id="reveal-wiki-link" href="#" target="_blank" rel="noopener" hidden>View on Wikipedia</a>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -472,7 +513,8 @@
     turnScore: 0,
     timer: null,
     timeLeft: 45,
-    currentMovie: null
+    currentMovie: null,
+    detailRequestId: 0
   };
 
   // ---------- Setup: team rows ----------
@@ -629,17 +671,20 @@
             srsort: 'random'
           }, controller);
 
-          let titles = ((data.query && data.query.search) || [])
-            .map(item => item.title)
-            .filter(title => !/^List of/i.test(title) && !title.includes(':'))
-            .map(title => title.replace(/\s*\([^)]*film[^)]*\)\s*$/i, '').trim())
-            .filter(title => title.length >= 2 && title.length <= 60);
+          const movies = ((data.query && data.query.search) || [])
+            .filter(item => !/^List of/i.test(item.title) && !item.title.includes(':'))
+            .map(item => ({
+              pageId: item.pageid,
+              pageTitle: item.title,
+              title: item.title.replace(/\s*\([^)]*film[^)]*\)\s*$/i, '').trim()
+            }))
+            .filter(movie => movie.title.length >= 2 && movie.title.length <= 60);
 
-          titles.forEach(title => {
-            const key = title.toLowerCase();
+          movies.forEach(movie => {
+            const key = movie.title.toLowerCase();
             if(seen.has(key)) return;
             seen.add(key);
-            tiers[difficultyForTitle(title)].push(title);
+            tiers[difficultyForTitle(movie.title)].push(movie);
           });
 
           const available = requiredDifficulty === 'mixed'
@@ -683,6 +728,131 @@
       throw new Error('Wikipedia could not load movie titles. Check your connection and try again.');
     }
     return { movies: results, failed };
+  }
+
+  async function fetchWikidataJson(params, controller){
+    const url = new URL('https://www.wikidata.org/w/api.php');
+    Object.entries({
+      action: 'wbgetentities',
+      format: 'json',
+      origin: '*',
+      ...params
+    }).forEach(([key, value]) => url.searchParams.set(key, value));
+
+    const res = await fetch(url, { signal: controller.signal, mode: 'cors' });
+    if(!res.ok) throw new Error('Wikidata returned HTTP ' + res.status);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.info || 'Wikidata API error');
+    return data;
+  }
+
+  function wikidataEntityId(claim){
+    return claim && claim.mainsnak && claim.mainsnak.datavalue &&
+      claim.mainsnak.datavalue.value && claim.mainsnak.datavalue.value.id;
+  }
+
+  function castOrder(claim){
+    const qualifier = claim && claim.qualifiers && claim.qualifiers.P1545 && claim.qualifiers.P1545[0];
+    const value = qualifier && qualifier.datavalue && qualifier.datavalue.value;
+    const number = Number.parseInt(value, 10);
+    return Number.isFinite(number) ? number : 9999;
+  }
+
+  async function loadMovieRevealDetails(movie){
+    const requestId = ++state.detailRequestId;
+    const detailsEl = document.getElementById('reveal-details');
+    const posterEl = document.getElementById('reveal-poster');
+    const castEl = document.getElementById('reveal-cast');
+    const linkEl = document.getElementById('reveal-wiki-link');
+
+    detailsEl.style.display = 'grid';
+    detailsEl.classList.add('no-poster');
+    posterEl.hidden = true;
+    posterEl.removeAttribute('src');
+    castEl.innerHTML = '<span>Loading movie details…</span>';
+    linkEl.hidden = true;
+
+    if(!movie.pageId){
+      castEl.innerHTML = '<span>Cast details are unavailable.</span>';
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    try{
+      const pageData = await fetchWikipediaJson({
+        pageids: String(movie.pageId),
+        prop: 'pageimages|pageprops',
+        piprop: 'thumbnail',
+        pithumbsize: '320',
+        pilicense: 'any'
+      }, controller);
+      const page = pageData.query && pageData.query.pages &&
+        Object.values(pageData.query.pages)[0];
+      if(!page) throw new Error('Movie page not found');
+
+      if(requestId !== state.detailRequestId) return;
+
+      linkEl.href = 'https://en.wikipedia.org/?curid=' + movie.pageId;
+      linkEl.hidden = false;
+
+      if(page.thumbnail && page.thumbnail.source){
+        posterEl.src = page.thumbnail.source;
+        posterEl.alt = movie.title + ' Wikipedia image';
+        posterEl.hidden = false;
+        detailsEl.classList.remove('no-poster');
+      }
+
+      const itemId = page.pageprops && page.pageprops.wikibase_item;
+      if(!itemId){
+        castEl.innerHTML = '<span>Cast details are unavailable.</span>';
+        return;
+      }
+
+      const movieEntityData = await fetchWikidataJson({
+        ids: itemId,
+        props: 'claims'
+      }, controller);
+      const entity = movieEntityData.entities && movieEntityData.entities[itemId];
+      const castClaims = ((entity && entity.claims && entity.claims.P161) || [])
+        .slice()
+        .sort((a, b) => castOrder(a) - castOrder(b));
+      const actorIds = Array.from(new Set(castClaims.map(wikidataEntityId).filter(Boolean))).slice(0, 3);
+
+      if(actorIds.length === 0){
+        castEl.innerHTML = '<span>Cast details are unavailable.</span>';
+        return;
+      }
+
+      const peopleData = await fetchWikidataJson({
+        ids: actorIds.join('|'),
+        props: 'labels|descriptions',
+        languages: 'en'
+      }, controller);
+      if(requestId !== state.detailRequestId) return;
+
+      castEl.innerHTML = '';
+      actorIds.forEach(id => {
+        const person = peopleData.entities && peopleData.entities[id];
+        if(!person) return;
+        const name = person.labels && person.labels.en && person.labels.en.value;
+        if(!name) return;
+        const description = person.descriptions && person.descriptions.en && person.descriptions.en.value;
+        const row = document.createElement('span');
+        row.textContent = description ? name + ' — ' + description : name;
+        castEl.appendChild(row);
+      });
+      if(!castEl.children.length){
+        castEl.innerHTML = '<span>Cast details are unavailable.</span>';
+      }
+    }catch(err){
+      if(requestId !== state.detailRequestId) return;
+      castEl.innerHTML = '<span>Movie details could not be loaded.</span>';
+      console.warn('CineMime detail fetch failed:', err.message);
+    }finally{
+      clearTimeout(timeoutId);
+    }
   }
 
   function scrambleTitle(title){
@@ -792,8 +962,11 @@
 
     state.languages.forEach(lang => {
       requestedTiers.forEach(tier => {
-        (source[lang][tier] || []).forEach(title => {
-          pool.push({ title, lang, difficulty: tier });
+        (source[lang][tier] || []).forEach(movieData => {
+          const movie = typeof movieData === 'string'
+            ? { title: movieData, pageTitle: movieData, pageId: null }
+            : movieData;
+          pool.push({ ...movie, lang, difficulty: tier });
         });
       });
     });
@@ -838,6 +1011,8 @@
   // ---------- Game screen ----------
   function startTurnBanner(){
     const team = state.teams[state.currentTeamIdx];
+    state.detailRequestId++;
+    document.getElementById('reveal-details').style.display = 'none';
     document.getElementById('current-team-name').textContent = team.name;
     document.getElementById('pre-reveal').style.display = 'flex';
     document.getElementById('active-turn').style.display = 'none';
@@ -930,6 +1105,7 @@
     const scoreEl = document.getElementById('turn-end-score');
     const movieEl = document.getElementById('turn-end-movie');
     movieEl.textContent = 'It was: ' + state.currentMovie.title;
+    loadMovieRevealDetails(state.currentMovie);
 
     if(result === 'correct'){
       whoEl.textContent = 'Correct!';
