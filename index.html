@@ -273,9 +273,31 @@
   .skip-btn:active,.correct-btn:active{transform:scale(.985);opacity:.8;}
   .skip-btn{flex:1;background:#E9E9ED;color:var(--text-secondary);}
   .correct-btn{flex:1.7;background:var(--blue);color:#fff;box-shadow:0 8px 20px rgba(0,113,227,.18);}
-  .turn-end{text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;z-index:2;}
-  .turn-end .who{color:var(--text-secondary);font-size:.82rem;font-weight:500;}
-  .turn-end .big{font-size:2.7rem;font-weight:700;color:var(--text);}
+  .turn-end{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;z-index:2;width:100%;}
+  .turn-end .who{color:var(--text-secondary);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;}
+  .turn-end .team-result-name{font-size:2rem;font-weight:750;letter-spacing:-.035em;color:var(--text);line-height:1.12;}
+  .turn-end .big{font-size:3.15rem;font-weight:750;color:var(--green);line-height:1.05;margin:4px 0;}
+  .turn-end .big.neutral{color:var(--text-secondary);}
+  .turn-total{display:inline-flex;align-items:center;gap:6px;background:rgba(48,179,80,.10);color:#21833A;border-radius:999px;padding:8px 13px;font-size:.84rem;font-weight:700;}
+  .turn-total.neutral{background:var(--card-elevated);color:var(--text-secondary);}
+  .turn-movie{color:var(--text-secondary);font-size:.86rem;margin:10px 0 0;font-weight:600;line-height:1.35;max-width:330px;}
+  .confetti-layer{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:90;}
+  .confetti-piece{
+    position:absolute;
+    top:-12vh;
+    left:var(--x);
+    width:var(--w);
+    height:var(--h);
+    border-radius:var(--radius);
+    background:var(--color);
+    opacity:0;
+    animation:confetti-fall var(--duration) cubic-bezier(.18,.74,.34,1) var(--delay) forwards;
+  }
+  @keyframes confetti-fall{
+    0%{opacity:0;transform:translate3d(0,-8vh,0) rotate(0deg) scale(.6);}
+    8%{opacity:1;}
+    100%{opacity:.95;transform:translate3d(var(--drift),112vh,0) rotate(var(--spin)) scale(1);}
+  }
   .reveal-details{
     width:min(100%,380px);
     display:none;
@@ -509,9 +531,11 @@
       </div>
 
       <div class="turn-end" id="turn-end" style="display:none;">
-        <div class="who" id="turn-end-who">Time's up</div>
+        <div class="who" id="turn-end-who">Turn complete</div>
+        <div class="team-result-name" id="turn-end-team">Team</div>
         <div class="big" id="turn-end-score">+0</div>
-        <p style="color:var(--text-secondary); font-size:0.92rem; margin:0; font-weight:600;" id="turn-end-movie"></p>
+        <div class="turn-total" id="turn-end-total">0 points total</div>
+        <p class="turn-movie" id="turn-end-movie"></p>
       </div>
     </div>
 
@@ -537,6 +561,7 @@
   </div>
 
 </div>
+<div class="confetti-layer" id="confetti-layer" aria-hidden="true"></div>
 <div class="poster-modal" id="poster-modal" role="dialog" aria-modal="true" aria-label="Movie poster preview" hidden>
   <div class="poster-modal-card">
     <button class="poster-modal-close" id="poster-modal-close" aria-label="Close poster preview">×</button>
@@ -1339,22 +1364,52 @@
     return false;
   }
 
+  function launchConfetti(){
+    const layer = document.getElementById('confetti-layer');
+    const colors = ['#0071E3','#30B350','#FFD60A','#FF375F','#AF52DE','#FF9F0A'];
+    layer.innerHTML = '';
+    for(let i = 0; i < 90; i++){
+      const piece = document.createElement('span');
+      piece.className = 'confetti-piece';
+      piece.style.setProperty('--x', Math.random() * 100 + 'vw');
+      piece.style.setProperty('--w', (6 + Math.random() * 7) + 'px');
+      piece.style.setProperty('--h', (8 + Math.random() * 11) + 'px');
+      piece.style.setProperty('--radius', Math.random() > .55 ? '50%' : '2px');
+      piece.style.setProperty('--color', colors[i % colors.length]);
+      piece.style.setProperty('--duration', (1.8 + Math.random() * 1.5) + 's');
+      piece.style.setProperty('--delay', (Math.random() * .55) + 's');
+      piece.style.setProperty('--drift', (-80 + Math.random() * 160) + 'px');
+      piece.style.setProperty('--spin', (-540 + Math.random() * 1080) + 'deg');
+      layer.appendChild(piece);
+    }
+    clearTimeout(launchConfetti.timer);
+    launchConfetti.timer = setTimeout(() => layer.innerHTML = '', 3900);
+  }
+
   function renderEndedTurn(result, penalty){
     document.getElementById('pre-reveal').style.display = 'none';
     document.getElementById('active-turn').style.display = 'none';
     document.getElementById('action-row').style.display = 'none';
     document.getElementById('turn-end').style.display = 'flex';
 
+    const team = state.teams[state.currentTeamIdx];
     const whoEl = document.getElementById('turn-end-who');
+    const teamEl = document.getElementById('turn-end-team');
     const scoreEl = document.getElementById('turn-end-score');
+    const totalEl = document.getElementById('turn-end-total');
     const movieEl = document.getElementById('turn-end-movie');
-    movieEl.textContent = 'It was: ' + state.currentMovie.title;
+    teamEl.textContent = team.name;
+    totalEl.textContent = team.score + (team.score === 1 ? ' point total' : ' points total');
+    movieEl.textContent = 'Movie: ' + state.currentMovie.title;
+    scoreEl.classList.toggle('neutral', result !== 'correct');
+    totalEl.classList.toggle('neutral', result !== 'correct');
 
     if(result === 'correct'){
-      whoEl.textContent = 'Correct!';
+      whoEl.textContent = 'Point scored';
       scoreEl.textContent = '+1';
+      launchConfetti();
     } else if(result === 'skipped'){
-      whoEl.textContent = 'Skipped';
+      whoEl.textContent = penalty ? 'Point deducted' : 'Skipped';
       scoreEl.textContent = penalty ? '-1' : '+0';
     } else {
       whoEl.textContent = "Time's up";
