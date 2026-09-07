@@ -1269,7 +1269,11 @@
       updateRing();
       if(state.timeLeft <= 0){
         clearInterval(state.timer);
-        endTurn('timeout');
+        state.timer = null;
+        state.timerEndsAt = null;
+        state.currentTeamIdx = (state.currentTeamIdx + 1) % state.teams.length;
+        startTurnBanner();
+        showToast("Time's up · next team");
       }
     };
     clearInterval(state.timer);
@@ -1574,9 +1578,15 @@
       if(state.phase === 'active' && state.currentMovie && state.timerEndsAt){
         restoreActiveTurn();
       }else if(state.phase === 'end' && state.currentMovie && state.teams.length){
-        goToScreen('game-screen');
-        document.getElementById('current-team-name').textContent = state.teams[state.currentTeamIdx].name;
-        renderEndedTurn(state.turnResult || 'timeout', !!state.turnPenalty);
+        if(state.turnResult === 'correct'){
+          goToScreen('game-screen');
+          document.getElementById('current-team-name').textContent = state.teams[state.currentTeamIdx].name;
+          renderEndedTurn('correct', false);
+        }else{
+          state.currentTeamIdx = (state.currentTeamIdx + 1) % state.teams.length;
+          goToScreen('game-screen');
+          startTurnBanner();
+        }
       }else if(state.phase === 'winner' && state.teams.length){
         showWinner();
       }else if(state.phase === 'pre' && state.teams.length && state.deck.length){
