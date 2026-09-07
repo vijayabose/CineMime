@@ -288,6 +288,63 @@
   .correct-btn{flex:1.7;background:var(--blue);color:#fff;box-shadow:0 8px 20px rgba(0,113,227,.18);}
   .new-movie-btn{position:absolute;top:0;left:0;width:44px;height:44px;border:0;background:rgba(0,113,227,.09);color:var(--blue);border-radius:50%;padding:0;font-size:1.45rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(0,113,227,.06);z-index:3;}
   .new-movie-btn:active{transform:scale(.94);}
+  .new-movie-btn svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;}
+  .skip-confirm[hidden]{display:none;}
+  .skip-confirm{
+    position:fixed;
+    inset:0;
+    z-index:110;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    background:rgba(10,10,12,.42);
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+  }
+  .skip-confirm-card{
+    width:min(100%,360px);
+    background:rgba(255,255,255,.97);
+    border:1px solid rgba(255,255,255,.95);
+    border-radius:26px;
+    padding:24px 21px 20px;
+    text-align:center;
+    box-shadow:0 24px 70px rgba(0,0,0,.22);
+  }
+  .skip-confirm-icon{
+    width:54px;
+    height:54px;
+    margin:0 auto 13px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--blue);
+    background:rgba(0,113,227,.09);
+  }
+  .skip-confirm-icon svg,.skip-tip-icon svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;}
+  .skip-confirm-card h3{font-size:1.3rem;margin:0 0 8px;}
+  .skip-confirm-card>p{margin:0;color:var(--text-secondary);font-size:.9rem;line-height:1.45;}
+  .skip-tip{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin:17px 0;
+    padding:12px;
+    border-radius:15px;
+    text-align:left;
+    color:var(--blue);
+    background:rgba(0,113,227,.075);
+    font-size:.8rem;
+    font-weight:650;
+    line-height:1.35;
+  }
+  .skip-tip-icon{display:flex;flex:0 0 auto;}
+  .skip-penalty-note{display:none;margin:-7px 0 14px!important;color:var(--red)!important;font-size:.78rem!important;font-weight:650;}
+  .skip-confirm-actions{display:flex;gap:9px;}
+  .skip-confirm-actions button{flex:1;border:0;border-radius:14px;padding:13px 10px;font-weight:700;cursor:pointer;}
+  .skip-cancel-btn{background:#E9E9ED;color:var(--text-secondary);}
+  .skip-confirm-btn{background:var(--blue);color:#fff;}
   .restart-game-btn{display:block;margin:14px auto 0;border:0;background:transparent;color:var(--text-secondary);padding:10px 14px;font-size:.78rem;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
   .turn-end{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;z-index:2;width:100%;}
   .turn-end .who{color:var(--text-secondary);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;}
@@ -651,7 +708,15 @@
       </div>
 
       <div id="active-turn" style="display:none; flex-direction:column; align-items:center; gap:13px; z-index:1; width:100%;">
-        <button class="new-movie-btn" id="new-movie-btn" aria-label="Show a new movie" title="New movie">↻</button>
+        <button class="new-movie-btn" id="new-movie-btn" aria-label="Shuffle for a new movie" title="Shuffle movie">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M16 3h5v5"></path>
+            <path d="M4 20 21 3"></path>
+            <path d="M21 16v5h-5"></path>
+            <path d="m15 15 6 6"></path>
+            <path d="m4 4 5 5"></path>
+          </svg>
+        </button>
         <div class="timer-row">
           <div class="ring-wrap">
             <svg width="126" height="126" viewBox="0 0 126 126" aria-label="Turn timer">
@@ -718,6 +783,26 @@
     <button class="poster-modal-close" id="poster-modal-close" aria-label="Close poster preview">×</button>
     <img class="poster-modal-img" id="poster-modal-img" alt="">
     <div class="poster-modal-caption" id="poster-modal-caption"></div>
+  </div>
+</div>
+<div class="skip-confirm" id="skip-confirm" role="dialog" aria-modal="true" aria-labelledby="skip-confirm-title" hidden>
+  <div class="skip-confirm-card">
+    <div class="skip-confirm-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg>
+    </div>
+    <h3 id="skip-confirm-title">Skip this turn?</h3>
+    <p><strong id="skip-current-team">This team</strong> will pass the turn to <strong id="skip-next-team">the next team</strong>.</p>
+    <div class="skip-tip">
+      <span class="skip-tip-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M16 3h5v5"></path><path d="M4 20 21 3"></path><path d="M21 16v5h-5"></path><path d="m15 15 6 6"></path><path d="m4 4 5 5"></path></svg>
+      </span>
+      <span>Only want a different movie? Tap the Shuffle icon instead.</span>
+    </div>
+    <p class="skip-penalty-note" id="skip-penalty-note">Skipping will deduct 1 point.</p>
+    <div class="skip-confirm-actions">
+      <button class="skip-cancel-btn" id="skip-cancel-btn">Keep playing</button>
+      <button class="skip-confirm-btn" id="skip-confirm-btn">Skip turn</button>
+    </div>
   </div>
 </div>
 <div class="restore-toast" id="restore-toast" role="status" aria-live="polite"></div>
@@ -1525,7 +1610,33 @@
     endTurn('correct');
   });
 
+  const skipConfirm = document.getElementById('skip-confirm');
+  let skipWasRunning = false;
+
+  function closeSkipConfirm(resumeTimer){
+    skipConfirm.hidden = true;
+    document.body.style.overflow = '';
+    if(resumeTimer && skipWasRunning && state.phase === 'paused') startTimer(true);
+    skipWasRunning = false;
+  }
+
   document.getElementById('skip-btn').addEventListener('click', () => {
+    if(state.timeLeft <= 0) return;
+    skipWasRunning = state.phase === 'active';
+    if(skipWasRunning) pauseTimer();
+    const currentTeam = state.teams[state.currentTeamIdx];
+    const nextTeam = state.teams[(state.currentTeamIdx + 1) % state.teams.length];
+    document.getElementById('skip-current-team').textContent = currentTeam.name;
+    document.getElementById('skip-next-team').textContent = nextTeam.name;
+    document.getElementById('skip-penalty-note').style.display = state.skipPenalty ? 'block' : 'none';
+    skipConfirm.hidden = false;
+    document.body.style.overflow = 'hidden';
+    document.getElementById('skip-confirm-btn').focus();
+  });
+
+  document.getElementById('skip-cancel-btn').addEventListener('click', () => closeSkipConfirm(true));
+  document.getElementById('skip-confirm-btn').addEventListener('click', () => {
+    closeSkipConfirm(false);
     if(state.timeLeft <= 0) return;
     clearInterval(state.timer);
     if(state.skipPenalty){
@@ -1533,7 +1644,13 @@
     }
     state.currentTeamIdx = (state.currentTeamIdx + 1) % state.teams.length;
     startTurnBanner();
-    showToast(state.skipPenalty ? 'Skipped · 1 point deducted' : 'Skipped · next team');
+    showToast(state.skipPenalty ? 'Turn skipped · 1 point deducted' : 'Turn passed to the next team');
+  });
+  skipConfirm.addEventListener('click', event => {
+    if(event.target === skipConfirm) closeSkipConfirm(true);
+  });
+  document.addEventListener('keydown', event => {
+    if(event.key === 'Escape' && !skipConfirm.hidden) closeSkipConfirm(true);
   });
 
   document.getElementById('new-movie-btn').addEventListener('click', () => {
@@ -1549,7 +1666,7 @@
     document.getElementById('action-row').style.display = 'flex';
     renderMovie();
     prepareTimer();
-    showToast('New movie ready');
+    showToast('Movie shuffled');
   });
 
   function checkWin(){
