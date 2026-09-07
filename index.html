@@ -277,39 +277,92 @@
   .turn-end .who{color:var(--text-secondary);font-size:.82rem;font-weight:500;}
   .turn-end .big{font-size:2.7rem;font-weight:700;color:var(--text);}
   .reveal-details{
-    width:100%;
+    width:min(100%,380px);
     display:none;
-    grid-template-columns:82px minmax(0,1fr);
-    gap:14px;
+    grid-template-columns:72px minmax(0,1fr);
+    gap:12px;
     align-items:start;
     text-align:left;
-    background:var(--card-elevated);
-    border-radius:16px;
-    padding:12px;
-    margin-top:6px;
+    background:linear-gradient(145deg,#F7F7FA,#EEEEF3);
+    border:1px solid rgba(0,0,0,.045);
+    border-radius:17px;
+    padding:10px;
+    margin-top:2px;
+    box-shadow:0 8px 22px rgba(0,0,0,.055);
   }
   .reveal-details.no-poster{grid-template-columns:1fr;}
   .reveal-poster{
-    width:82px;
+    width:72px;
     aspect-ratio:2/3;
     object-fit:cover;
     border-radius:11px;
     background:#DDDDE2;
-    box-shadow:0 4px 12px rgba(0,0,0,.10);
+    box-shadow:0 4px 12px rgba(0,0,0,.12);
+    cursor:zoom-in;
+    transition:transform .16s ease,box-shadow .16s ease;
   }
-  .reveal-copy{min-width:0;}
+  .reveal-poster:active{transform:scale(.96);}
+  .reveal-poster:focus-visible{outline:3px solid rgba(0,113,227,.35);outline-offset:3px;}
+  .reveal-copy{min-width:0;padding:2px 2px 0 0;}
   .reveal-label{
     color:var(--text-secondary);
-    font-size:.72rem;
-    font-weight:650;
+    font-size:.66rem;
+    font-weight:700;
     text-transform:uppercase;
-    letter-spacing:.07em;
-    margin-bottom:6px;
+    letter-spacing:.08em;
+    margin-bottom:5px;
   }
-  .reveal-cast{display:grid;gap:4px;color:var(--text);font-size:.84rem;line-height:1.3;}
+  .reveal-cast{display:grid;gap:3px;color:var(--text);font-size:.74rem;line-height:1.24;}
   .reveal-cast span{display:block;}
-  .reveal-link{display:inline-block;margin-top:8px;color:var(--blue);font-size:.8rem;font-weight:600;text-decoration:none;}
+  .reveal-link{display:inline-block;margin-top:6px;color:var(--blue);font-size:.72rem;font-weight:650;text-decoration:none;}
   #next-turn-btn{margin-top:2px!important;}
+  .poster-modal[hidden]{display:none;}
+  .poster-modal{
+    position:fixed;
+    inset:0;
+    z-index:100;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    background:rgba(10,10,12,.72);
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+  }
+  .poster-modal-card{
+    position:relative;
+    width:min(86vw,430px);
+    max-height:88vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:12px;
+  }
+  .poster-modal-img{
+    display:block;
+    max-width:100%;
+    max-height:78vh;
+    object-fit:contain;
+    border-radius:20px;
+    background:#fff;
+    box-shadow:0 24px 70px rgba(0,0,0,.42);
+  }
+  .poster-modal-caption{color:#fff;font-size:.9rem;font-weight:650;text-align:center;text-shadow:0 1px 6px rgba(0,0,0,.5);}
+  .poster-modal-close{
+    position:absolute;
+    top:-14px;
+    right:-14px;
+    width:38px;
+    height:38px;
+    border:1px solid rgba(255,255,255,.35);
+    border-radius:50%;
+    background:rgba(30,30,32,.86);
+    color:#fff;
+    font-size:1.4rem;
+    line-height:1;
+    cursor:pointer;
+    z-index:1;
+  }
 
   .winner-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:8px;background:rgba(255,255,255,.9);border-radius:28px;padding:28px;box-shadow:0 16px 42px rgba(0,0,0,.07);}
   .winner-wrap .eyebrow{color:var(--text-secondary);font-size:.9rem;font-weight:500;}
@@ -433,7 +486,7 @@
         <button class="primary-btn" id="reveal-btn" style="width:auto; padding:14px 30px;">Reveal &amp; start timer</button>
       </div>
 
-      <div id="active-turn" style="display:none; flex-direction:column; align-items:center; gap:18px; z-index:1;">
+      <div id="active-turn" style="display:none; flex-direction:column; align-items:center; gap:13px; z-index:1; width:100%;">
         <div class="ring-wrap">
           <svg width="126" height="126" viewBox="0 0 126 126" aria-label="Turn timer">
             <circle class="ring-bg" cx="63" cy="63" r="52"></circle>
@@ -445,20 +498,20 @@
           <div class="lang-tag"><span class="dot" id="active-lang-dot"></span><span id="active-lang-label"></span></div>
           <div class="movie-title" id="movie-title"></div>
         </div>
+        <div class="reveal-details" id="reveal-details" aria-live="polite">
+          <img class="reveal-poster" id="reveal-poster" alt="" role="button" tabindex="0" aria-label="Enlarge movie poster" hidden>
+          <div class="reveal-copy">
+            <div class="reveal-label">Starring</div>
+            <div class="reveal-cast" id="reveal-cast"><span>Loading movie details…</span></div>
+            <a class="reveal-link" id="reveal-wiki-link" href="#" target="_blank" rel="noopener" hidden>Wikipedia ↗</a>
+          </div>
+        </div>
       </div>
 
       <div class="turn-end" id="turn-end" style="display:none;">
         <div class="who" id="turn-end-who">Time's up</div>
         <div class="big" id="turn-end-score">+0</div>
         <p style="color:var(--text-secondary); font-size:0.92rem; margin:0; font-weight:600;" id="turn-end-movie"></p>
-        <div class="reveal-details" id="reveal-details" aria-live="polite">
-          <img class="reveal-poster" id="reveal-poster" alt="" hidden>
-          <div class="reveal-copy">
-            <div class="reveal-label">Starring</div>
-            <div class="reveal-cast" id="reveal-cast"><span>Loading movie details…</span></div>
-            <a class="reveal-link" id="reveal-wiki-link" href="#" target="_blank" rel="noopener" hidden>View on Wikipedia</a>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -470,7 +523,6 @@
     <button class="primary-btn" id="next-turn-btn" style="display:none; margin-top:16px;">Next team's turn</button>
 
     <div class="score-strip" id="score-strip"></div>
-    <button class="share-btn" id="share-game-btn">Share game link</button>
   </div>
 
   <!-- WINNER SCREEN -->
@@ -484,6 +536,13 @@
     </div>
   </div>
 
+</div>
+<div class="poster-modal" id="poster-modal" role="dialog" aria-modal="true" aria-label="Movie poster preview" hidden>
+  <div class="poster-modal-card">
+    <button class="poster-modal-close" id="poster-modal-close" aria-label="Close poster preview">×</button>
+    <img class="poster-modal-img" id="poster-modal-img" alt="">
+    <div class="poster-modal-caption" id="poster-modal-caption"></div>
+  </div>
 </div>
 <div class="restore-toast" id="restore-toast" role="status" aria-live="polite"></div>
 
@@ -950,7 +1009,7 @@
         pageids: String(movie.pageId),
         prop: 'pageimages|pageprops',
         piprop: 'thumbnail',
-        pithumbsize: '320',
+        pithumbsize: '720',
         pilicense: 'any'
       }, controller);
       const page = pageData.query && pageData.query.pages &&
@@ -1125,7 +1184,6 @@
   document.getElementById('time-limit').addEventListener('input', saveSession);
   document.getElementById('target-score').addEventListener('input', saveSession);
   document.getElementById('share-setup-btn').addEventListener('click', shareGame);
-  document.getElementById('share-game-btn').addEventListener('click', shareGame);
 
   function buildDeck(){
     const source = state.movieSource;
@@ -1222,6 +1280,7 @@
     const titleEl = document.getElementById('movie-title');
     titleEl.textContent = state.scramble ? scrambleTitle(m.title) : m.title;
     titleEl.classList.toggle('scrambled', state.scramble);
+    loadMovieRevealDetails(m);
   }
 
   const RING_R = 52;
@@ -1290,7 +1349,6 @@
     const scoreEl = document.getElementById('turn-end-score');
     const movieEl = document.getElementById('turn-end-movie');
     movieEl.textContent = 'It was: ' + state.currentMovie.title;
-    loadMovieRevealDetails(state.currentMovie);
 
     if(result === 'correct'){
       whoEl.textContent = 'Correct!';
@@ -1383,6 +1441,43 @@
     currentStep = 1;
     showStep(1, 'back');
     goToScreen('setup-screen');
+  });
+
+  const posterEl = document.getElementById('reveal-poster');
+  const posterModal = document.getElementById('poster-modal');
+  const posterModalImg = document.getElementById('poster-modal-img');
+  const posterModalCaption = document.getElementById('poster-modal-caption');
+
+  function openPoster(){
+    if(posterEl.hidden || !posterEl.src) return;
+    posterModalImg.src = posterEl.src;
+    posterModalImg.alt = posterEl.alt;
+    posterModalCaption.textContent = state.currentMovie ? state.currentMovie.title : '';
+    posterModal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    document.getElementById('poster-modal-close').focus();
+  }
+
+  function closePoster(){
+    posterModal.hidden = true;
+    posterModalImg.removeAttribute('src');
+    document.body.style.overflow = '';
+    posterEl.focus();
+  }
+
+  posterEl.addEventListener('click', openPoster);
+  posterEl.addEventListener('keydown', event => {
+    if(event.key === 'Enter' || event.key === ' '){
+      event.preventDefault();
+      openPoster();
+    }
+  });
+  document.getElementById('poster-modal-close').addEventListener('click', closePoster);
+  posterModal.addEventListener('click', event => {
+    if(event.target === posterModal) closePoster();
+  });
+  document.addEventListener('keydown', event => {
+    if(event.key === 'Escape' && !posterModal.hidden) closePoster();
   });
 
   function applyConfig(config){
