@@ -50,9 +50,15 @@
     padding:24px 18px 36px;
   }
   h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.025em;}
-  .brand{display:flex;align-items:center;gap:10px;margin:2px 4px 24px;}
+  .brand{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 4px 24px;}
+  .brand-home{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:0;color:inherit;cursor:pointer;text-align:left;}
+  .brand-home:active{opacity:.65;}
+  .brand-home:focus-visible{outline:3px solid rgba(0,113,227,.25);outline-offset:5px;border-radius:8px;}
   .reel{width:30px;height:30px;flex-shrink:0;}
   .brand h1{font-size:1.35rem;color:var(--text);}
+  .header-actions{display:flex;align-items:center;gap:6px;}
+  .header-nav-btn{border:0;background:rgba(255,255,255,.7);color:var(--blue);border-radius:999px;padding:8px 10px;font-size:.7rem;font-weight:700;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);}
+  .header-nav-btn:active{transform:scale(.96);}
   .screen{display:none;flex:1;flex-direction:column;}
   .screen.active{display:flex;animation:rise .28s cubic-bezier(.2,.8,.2,1);}
   @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
@@ -283,8 +289,6 @@
   .new-movie-btn{position:absolute;top:0;left:0;width:44px;height:44px;border:0;background:rgba(0,113,227,.09);color:var(--blue);border-radius:50%;padding:0;font-size:1.45rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(0,113,227,.06);z-index:3;}
   .new-movie-btn:active{transform:scale(.94);}
   .restart-game-btn{display:block;margin:14px auto 0;border:0;background:transparent;color:var(--text-secondary);padding:10px 14px;font-size:.78rem;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
-  .game-nav-actions{display:flex;justify-content:center;gap:8px;margin-top:2px;}
-  .game-nav-btn{border:0;background:transparent;color:var(--blue);padding:9px 12px;font-size:.78rem;font-weight:650;cursor:pointer;}
   .turn-end{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;z-index:2;width:100%;}
   .turn-end .who{color:var(--text-secondary);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;}
   .turn-end .team-result-name{font-size:2rem;font-weight:750;letter-spacing:-.035em;color:var(--text);line-height:1.12;}
@@ -422,17 +426,23 @@
 <body>
 <div class="app">
 
-  <div class="brand">
-    <svg class="reel" viewBox="0 0 48 48" fill="none">
-      <circle cx="24" cy="24" r="20" stroke="#0A84FF" stroke-width="3"/>
-      <circle cx="24" cy="12" r="4.2" fill="#0A84FF"/>
-      <circle cx="34.4" cy="19.3" r="4.2" fill="#0A84FF"/>
-      <circle cx="30.6" cy="31.4" r="4.2" fill="#0A84FF"/>
-      <circle cx="17.4" cy="31.4" r="4.2" fill="#0A84FF"/>
-      <circle cx="13.6" cy="19.3" r="4.2" fill="#0A84FF"/>
-    </svg>
-    <h1>CineMime</h1>
-  </div>
+  <header class="brand">
+    <button class="brand-home" id="brand-home-btn" aria-label="Go to CineMime home">
+      <svg class="reel" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <circle cx="24" cy="24" r="20" stroke="#0A84FF" stroke-width="3"/>
+        <circle cx="24" cy="12" r="4.2" fill="#0A84FF"/>
+        <circle cx="34.4" cy="19.3" r="4.2" fill="#0A84FF"/>
+        <circle cx="30.6" cy="31.4" r="4.2" fill="#0A84FF"/>
+        <circle cx="17.4" cy="31.4" r="4.2" fill="#0A84FF"/>
+        <circle cx="13.6" cy="19.3" r="4.2" fill="#0A84FF"/>
+      </svg>
+      <h1>CineMime</h1>
+    </button>
+    <nav class="header-actions" aria-label="Game navigation">
+      <button class="header-nav-btn" id="game-home-btn">Home</button>
+      <button class="header-nav-btn" id="game-settings-btn">Settings</button>
+    </nav>
+  </header>
 
   <!-- SETUP SCREEN (STEP WIZARD) -->
   <div class="screen active" id="setup-screen">
@@ -557,10 +567,6 @@
 
     <div class="score-strip" id="score-strip"></div>
     <button class="restart-game-btn" id="restart-game-btn">Restart game</button>
-    <div class="game-nav-actions">
-      <button class="game-nav-btn" id="game-home-btn">Home</button>
-      <button class="game-nav-btn" id="game-settings-btn">Settings</button>
-    </div>
   </div>
 
   <!-- WINNER SCREEN -->
@@ -1576,6 +1582,7 @@
 
   document.getElementById('game-home-btn').addEventListener('click', () => openGameSetup(1));
   document.getElementById('game-settings-btn').addEventListener('click', () => openGameSetup(4));
+  document.getElementById('brand-home-btn').addEventListener('click', () => openGameSetup(1));
 
   document.getElementById('new-game-btn').addEventListener('click', () => {
     clearInterval(state.timer);
