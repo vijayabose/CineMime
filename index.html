@@ -413,6 +413,72 @@
   .restore-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);background:rgba(29,29,31,.94);color:#fff;padding:11px 16px;border-radius:999px;font-size:.82rem;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:20;white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden;text-overflow:ellipsis;}
   .restore-toast.show{opacity:1;transform:translate(-50%,0);}
 
+  /* Option 1: centered gameplay composition */
+  #game-screen.active{
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto minmax(min-content,1fr) auto auto;
+    align-content:stretch;
+    gap:10px;
+  }
+  #game-screen .score-strip{
+    order:-2;
+    margin:0;
+  }
+  #game-screen .turn-banner{
+    order:-1;
+    text-align:center;
+    margin:3px 4px 0;
+  }
+  #game-screen .turn-banner h2{
+    font-size:1.42rem;
+  }
+  #game-screen .stage{
+    order:0;
+    align-self:center;
+    width:100%;
+    min-height:430px;
+    padding:28px 24px;
+    gap:16px;
+  }
+  #game-screen #active-turn{
+    justify-content:center;
+    min-height:370px;
+  }
+  #game-screen .ring-wrap,
+  #game-screen .ring-wrap svg{
+    width:136px;
+    height:136px;
+  }
+  #game-screen .action-row,
+  #game-screen #next-turn-btn{
+    order:1;
+    margin-top:0!important;
+  }
+  #game-screen .restart-game-btn{
+    order:2;
+    margin:2px auto 0;
+  }
+  #game-screen .new-movie-btn{
+    top:4px;
+    left:4px;
+  }
+  @media(max-height:760px){
+    .app{padding-top:18px;padding-bottom:24px;}
+    .brand{margin-bottom:17px;}
+    #game-screen.active{gap:8px;}
+    #game-screen .turn-banner{margin-top:0;}
+    #game-screen .turn-banner .who{display:none;}
+    #game-screen .turn-banner h2{font-size:1.25rem;}
+    #game-screen .stage{min-height:360px;padding:22px 19px;gap:12px;}
+    #game-screen #active-turn{min-height:320px;gap:10px!important;}
+    #game-screen .ring-wrap,
+    #game-screen .ring-wrap svg{width:118px;height:118px;}
+    #game-screen .reveal-details{grid-template-columns:62px minmax(0,1fr);}
+    #game-screen .reveal-poster{width:62px;}
+    #game-screen .restart-game-btn{padding:7px 12px;}
+  }
+
   @media(max-width:380px){
     .app{padding:18px 14px 28px;}
     .brand{margin-bottom:18px;}
