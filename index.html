@@ -413,6 +413,71 @@
   .restore-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);background:rgba(29,29,31,.94);color:#fff;padding:11px 16px;border-radius:999px;font-size:.82rem;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:20;white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden;text-overflow:ellipsis;}
   .restore-toast.show{opacity:1;transform:translate(-50%,0);}
 
+  /* Option 1: centered layout across every view */
+  #setup-screen.active{
+    justify-content:center;
+  }
+  #setup-screen .progress-track,
+  #setup-screen .step-label,
+  #setup-screen .wizard-step,
+  #setup-screen .error-text,
+  #setup-screen .wizard-nav{
+    width:100%;
+  }
+  #setup-screen .progress-track{
+    margin-left:auto;
+    margin-right:auto;
+  }
+  #setup-screen .step-label{
+    text-align:center;
+    margin-bottom:16px;
+  }
+  #setup-screen .panel{
+    text-align:center;
+    padding:26px 22px;
+    margin-bottom:14px;
+  }
+  #setup-screen .panel h2{
+    font-size:1.28rem;
+    margin-bottom:10px;
+  }
+  #setup-screen .panel p.hint{
+    max-width:350px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  #setup-screen .chip-row{
+    justify-content:center;
+  }
+  #setup-screen .team-row,
+  #setup-screen .field-row,
+  #setup-screen .toggle-row{
+    text-align:left;
+  }
+  #setup-screen .wizard-nav{
+    justify-content:center;
+  }
+  #winner-screen.active{
+    justify-content:center;
+  }
+  #winner-screen .winner-wrap{
+    flex:0 0 auto;
+    width:100%;
+    min-height:430px;
+  }
+  #game-screen .hidden-overlay,
+  #game-screen .turn-end{
+    min-height:340px;
+    justify-content:center;
+  }
+  @media(max-height:760px){
+    #setup-screen .panel{padding:21px 19px;}
+    #setup-screen .step-label{margin-bottom:12px;}
+    #winner-screen .winner-wrap{min-height:360px;}
+    #game-screen .hidden-overlay,
+    #game-screen .turn-end{min-height:300px;}
+  }
+
   /* Option 1: centered gameplay composition */
   #game-screen.active{
     display:grid;
