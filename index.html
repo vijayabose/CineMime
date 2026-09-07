@@ -535,6 +535,11 @@
       <button class="correct-btn" id="correct-btn">Got it! ✓</button>
     </div>
 
+    <div class="action-row" id="timeout-actions" style="display:none;">
+      <button class="skip-btn" id="timeout-next-btn">Next team</button>
+      <button class="correct-btn" id="extend-time-btn">+15 seconds</button>
+    </div>
+
     <button class="primary-btn" id="next-turn-btn" style="display:none; margin-top:16px;">Next team's turn</button>
 
     <div class="score-strip" id="score-strip"></div>
@@ -1220,6 +1225,7 @@
     document.getElementById('active-turn').style.display = 'none';
     document.getElementById('turn-end').style.display = 'none';
     document.getElementById('action-row').style.display = 'none';
+    document.getElementById('timeout-actions').style.display = 'none';
     document.getElementById('next-turn-btn').style.display = 'none';
     state.turnScore = 0;
     state.currentMovie = null;
@@ -1268,12 +1274,7 @@
       document.getElementById('ring-time').textContent = state.timeLeft;
       updateRing();
       if(state.timeLeft <= 0){
-        clearInterval(state.timer);
-        state.timer = null;
-        state.timerEndsAt = null;
-        state.currentTeamIdx = (state.currentTeamIdx + 1) % state.teams.length;
-        startTurnBanner();
-        showToast("Time's up · next team");
+        showTimeoutOptions();
       }
     };
     clearInterval(state.timer);
@@ -1287,6 +1288,33 @@
     ringFg.style.strokeDashoffset = RING_CIRC * (1 - frac);
     ringFg.style.stroke = frac < 0.2 ? '#FF453A' : '#0A84FF';
   }
+
+  function showTimeoutOptions(){
+    clearInterval(state.timer);
+    state.timer = null;
+    state.timerEndsAt = null;
+    state.timeLeft = 0;
+    state.phase = 'timeout';
+    document.getElementById('ring-time').textContent = '0';
+    updateRing();
+    document.getElementById('action-row').style.display = 'none';
+    document.getElementById('timeout-actions').style.display = 'flex';
+    saveSession();
+    showToast("Time's up — add time or move on");
+  }
+
+  document.getElementById('extend-time-btn').addEventListener('click', () => {
+    state.timeLeft = 15;
+    state.phase = 'active';
+    document.getElementById('timeout-actions').style.display = 'none';
+    document.getElementById('action-row').style.display = 'flex';
+    startTimer();
+  });
+
+  document.getElementById('timeout-next-btn').addEventListener('click', () => {
+    state.currentTeamIdx = (state.currentTeamIdx + 1) % state.teams.length;
+    startTurnBanner();
+  });
 
   document.getElementById('correct-btn').addEventListener('click', () => {
     if(state.timeLeft <= 0) return;
@@ -1354,7 +1382,8 @@
     document.getElementById('pre-reveal').style.display = 'none';
     document.getElementById('active-turn').style.display = 'none';
     document.getElementById('action-row').style.display = 'none';
-    document.getElementById('turn-end').style.display = 'flex';
+    document.getElementById('timeout-actions').style.display = 'none';
+          document.getElementById('turn-end').style.display = 'flex';
 
     const team = state.teams[state.currentTeamIdx];
     const whoEl = document.getElementById('turn-end-who');
@@ -1547,12 +1576,26 @@
     document.getElementById('active-turn').style.display = 'flex';
     document.getElementById('turn-end').style.display = 'none';
     document.getElementById('action-row').style.display = 'flex';
+    document.getElementById('timeout-actions').style.display = 'none';
     document.getElementById('next-turn-btn').style.display = 'none';
     renderScoreStrip();
     renderMovie();
     state.timeLeft = Math.max(0, Math.ceil((state.timerEndsAt - Date.now()) / 1000));
-    if(state.timeLeft <= 0) endTurn('timeout');
+    if(state.timeLeft <= 0) showTimeoutOptions();
     else startTimer(true);
+  }
+
+  function restoreTimeoutTurn(){
+    goToScreen('game-screen');
+    document.getElementById('current-team-name').textContent = state.teams[state.currentTeamIdx].name;
+    document.getElementById('pre-reveal').style.display = 'none';
+    document.getElementById('active-turn').style.display = 'flex';
+    document.getElementById('turn-end').style.display = 'none';
+    document.getElementById('action-row').style.display = 'none';
+    document.getElementById('next-turn-btn').style.display = 'none';
+    renderScoreStrip();
+    renderMovie();
+    showTimeoutOptions();
   }
 
   function restoreSession(){
@@ -1577,15 +1620,16 @@
 
       if(state.phase === 'active' && state.currentMovie && state.timerEndsAt){
         restoreActiveTurn();
+      }else if(state.phase === 'timeout' && state.currentMovie && state.teams.length){
+        restoreTimeoutTurn();
       }else if(state.phase === 'end' && state.currentMovie && state.teams.length){
         if(state.turnResult === 'correct'){
           goToScreen('game-screen');
           document.getElementById('current-team-name').textContent = state.teams[state.currentTeamIdx].name;
           renderEndedTurn('correct', false);
         }else{
-          state.currentTeamIdx = (state.currentTeamIdx + 1) % state.teams.length;
-          goToScreen('game-screen');
-          startTurnBanner();
+          state.phase = 'timeout';
+          restoreTimeoutTurn();
         }
       }else if(state.phase === 'winner' && state.teams.length){
         showWinner();
